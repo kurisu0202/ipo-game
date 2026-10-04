@@ -1,0 +1,165 @@
+// =====================================================================
+//  3年で上場 ― 数値設定（バランス調整はこのファイルだけで行う）
+//  金額の単位はすべて「万円」、期間の単位は「期」（四半期）
+// =====================================================================
+import type { CardKey, HappeningKey, ProjectType, Skill, SpyOrder, Tag } from './types';
+
+export const SKILLS: Skill[] = ['FE', 'BE', 'IN', 'DE', 'SE', 'AI'];
+export const SKILL_NAME: Record<Skill, string> = { FE: 'フロント', BE: 'バック', IN: 'インフラ', DE: 'デザイン', SE: 'セキュリティ', AI: 'AI' };
+export const SKILL_ICON: Record<Skill, string> = { FE: '🖥️', BE: '⚙️', IN: '🌐', DE: '🎨', SE: '🔒', AI: '🤖' };
+export const SEASONS = ['春', '夏', '秋', '冬'];
+
+export const GAME = {
+  quarters: 12,
+  minPlayers: 2,
+  maxPlayers: 4,
+  startCash: 1000,
+  startEngineers: [
+    { skills: { BE: 3, IN: 1 }, salary: 60 },
+    { skills: { FE: 3, DE: 1 }, salary: 60 },
+    { skills: { SE: 2, AI: 2 }, salary: 60 },
+  ] as { skills: Partial<Record<Skill, number>>; salary: number }[],
+  startHand: 3,
+  handMax: 6,
+  spyOrders: 2,
+};
+
+// ---------- 入札・採用 ----------
+export const BID_PCTS = [100, 90, 80, 70, 60, 50] as const;
+export const HIRE_FEES = [0, 50, 100, 200, 400] as const;
+export const REP_DISCOUNT = 0.03;      // 比較値 = 入札額 ×(1 − 0.03×評判)
+export const DUMP_RATE = 0.8;          // 安値ダンピング
+export const CLOSE_RACE = 0.05;        // 「僅差の勝負！」と出す差
+
+// ---------- 案件 ----------
+export interface ProjectSpec {
+  name: string; desc: string; weight: number; dur: [number, number]; rpq: number; req: [number, number];
+  cand: Skill[]; must?: Skill; pay: 'lump' | 'turn'; icon: string;
+}
+export const PROJECT_TYPES: Record<ProjectType, ProjectSpec> = {
+  speed: { name: 'スピード案件', icon: '⚡', desc: '短期で終わる小さめの開発', weight: 3, dur: [1, 2], rpq: 190, req: [3, 4], cand: ['FE', 'BE', 'DE'], pay: 'lump' },
+  big: { name: '大型システム', icon: '🏢', desc: '長期・大人数の基幹システム', weight: 2, dur: [4, 6], rpq: 330, req: [7, 9], cand: ['BE', 'IN', 'FE', 'SE'], pay: 'lump' },
+  maint: { name: '保守運用', icon: '🔧', desc: '毎期少しずつ支払われる安定収入', weight: 2, dur: [4, 4], rpq: 140, req: [2, 2], cand: ['IN', 'BE'], pay: 'turn' },
+  startup: { name: 'スタートアップ', icon: '🚀', desc: '完了すると50%で株がもらえる', weight: 2, dur: [2, 3], rpq: 130, req: [3, 5], cand: ['FE', 'BE', 'DE', 'AI'], pay: 'lump' },
+  gov: { name: '官公庁', icon: '🏛️', desc: 'セキュリティ必須のお堅い案件', weight: 1, dur: [3, 5], rpq: 300, req: [5, 7], cand: ['BE', 'IN'], must: 'SE', pay: 'lump' },
+  fire: { name: '炎上火消し', icon: '🔥', desc: '高単価だが落札で負債+3', weight: 1, dur: [1, 1], rpq: 560, req: [5, 6], cand: ['BE', 'IN', 'FE'], pay: 'lump' },
+  overseas: { name: '海外案件', icon: '🌏', desc: '為替の急変動で報酬が2倍か半分に', weight: 2, dur: [2, 4], rpq: 270, req: [4, 6], cand: ['FE', 'BE', 'IN', 'AI'], pay: 'lump' },
+  ai: { name: 'AI案件', icon: '🧠', desc: 'AI必須。完了でAIノウハウ+1', weight: 2, dur: [2, 4], rpq: 310, req: [4, 6], cand: ['BE', 'IN'], must: 'AI', pay: 'lump' },
+  design: { name: 'デザイン重視', icon: '✨', desc: 'デザインを必要量+2以上で報酬×1.3', weight: 2, dur: [2, 3], rpq: 230, req: [4, 5], cand: ['FE'], must: 'DE', pay: 'lump' },
+  secret: { name: '極秘案件', icon: '🕶️', desc: '予算は非公開。完了時に×0.5〜×3', weight: 1, dur: [2, 3], rpq: 260, req: [4, 6], cand: ['FE', 'BE', 'IN', 'DE', 'SE', 'AI'], pay: 'lump' },
+};
+export const BUDGET = { rate: 1.15, longBonus: 0.08 };   // 予算 = rpq×1.15×期間×(1+0.08×(期間−1))×タグ倍率
+export const MUST_SHARE = 0.45;                         // 必須スキルの割合
+export const TAG_CHANCE = 0.5;
+export const TAGS: Record<Tag, { name: string; desc: string; mult?: number }> = {
+  rush: { name: '急募', desc: '予算×1.3', mult: 1.3 },
+  rich: { name: '予算潤沢', desc: '予算×1.5', mult: 1.5 },
+  repeat: { name: 'リピートあり', desc: '完了時に+100' },
+  muri: { name: '無茶な要件', desc: '進むたび負債+1' },
+  legacy: { name: 'レガシー環境', desc: 'インフラ+1が追加で必要' },
+  record: { name: '実績になる', desc: '完了で評判+1' },
+  haggle: { name: '値切り屋', desc: '完了時の報酬×0.8', mult: 0.8 },
+};
+export const BIG_GOV = { minDur: 4, rpq: 300, mult: 1.4 };  // 秋の官公庁大型公募
+export const DESIGN_BONUS = { extra: 2, mult: 1.3 };
+export const SECRET_MULTS = [0.5, 1, 1.5, 2, 3];
+export const LATE_PENALTY = 0.1;
+export const REPEAT_BONUS = 100;
+export const STOCK_CHANCE = 0.5;
+export const STOCK_VALUES = [0, 0, 300, 800, 2000];
+export const RUSH_DEBT = 2;
+export const FIRE_DEBT = 3;
+
+// ---------- 社員 ----------
+export const ENGINEER = {
+  normalPerQuarter: 3,
+  normalMain: [2, 4] as [number, number],
+  subChance: 0.55,
+  normalSub: [1, 2] as [number, number],
+  salaryBase: 20, salaryPerSkill: 10,
+  rookieSkill: [1, 2] as [number, number], rookieSalary: 25, rookieGrow: 1, rookieRaise: 10, springRookies: 2,
+  legendSkills: [5, 4], legendSalary: 150,
+  headhuntRaise: 1.5,
+  hhSpyChance: 0.1,
+};
+export const LAST_NAMES = ['佐藤', '鈴木', '高橋', '田中', '伊藤', '渡辺', '山本', '中村', '小林', '加藤', '吉田', '山田', '佐々木', '松本', '井上', '木村', '林', '清水', '山崎', '森', '池田', '橋本', '阿部', '石川', '前田', '藤田', '岡田', '後藤', '長谷川', '村上'];
+export const FIRST_NAMES = ['翔', '陽菜', '蓮', '結衣', '湊', '葵', '大和', '凛', '悠真', 'さくら', '樹', '美咲', '颯太', '莉子', '健', '彩', '拓海', '七海', '誠', '楓', '隼人', '舞', '亮', '千尋', '直樹', 'ひかり', '大輔', '愛', '和也', '真央'];
+
+// ---------- 自社サービス ----------
+export const SERVICE = { launchCost: 300, maxLv: 5, needBase: 3, income: [0, 60, 130, 220, 330, 460], valuePerLv: 300 };
+
+// ---------- 開発フェーズ ----------
+export const SEVERANCE_QUARTERS = 1;
+export const INVESTIGATE_COST = 50;
+export const REMOTE_SALARY = 0.7;
+export const INCIDENT = { debt: 6, loss: 100, rep: -1 };
+export const INTEREST = 0.1;
+export const TROLL = { pay: 50, quarters: 3 };
+export const EMPLOYEE_EVENT = { chance: 0.35, awaken: 2 };
+
+// ---------- レンタルとスパイ ----------
+export const RENTAL = { periods: [1, 2, 3] as const, shares: [10, 20, 30] as const, honestForRep: 3 };
+export const SPY_STEAL = 0.2;
+export const ACCUSE = { rentFine: 200, employerRep: -2, wrongRep: -1 };
+export const SPY_ORDER_NAME: Record<SpyOrder, string> = { intel: '情報収集', sabo: 'サボタージュ', steal: '機密持ち出し' };
+export const SPY_ORDER_DESC: Record<SpyOrder, string> = {
+  intel: '潜入先の手札と、今期の提出済み入札が見える',
+  sabo: '決算のとき、潜入先でのスキルが全部0になる',
+  steal: '担当案件の支払いの20%をこっそり持ち出す',
+};
+
+// ---------- 季節イベント ----------
+export const HACKATHON = { prize: 200, rep: 1 };
+export const AUDIT = { perDebt: 30, rep: 1 };
+
+// ---------- 作戦カード ----------
+export interface CardSpec { name: string; count: number; kind: 'attack' | 'self' | 'defense'; desc: string; icon: string; blocks?: CardKey[] }
+export const CARDS: Record<CardKey, CardSpec> = {
+  A1: { name: 'ヘッドハンティング', count: 3, kind: 'attack', icon: '🎯', desc: '相手の一番優秀な社員（借りている社員以外）を自社へ。給料×1.5' },
+  A2: { name: '退職代行を紹介', count: 2, kind: 'attack', icon: '📮', desc: '相手の社員1人（借りている社員以外）がランダムに退職' },
+  A3: { name: '深夜のSlack爆撃', count: 3, kind: 'attack', icon: '💬', desc: '今期、相手の全社員の各スキル−1' },
+  A4: { name: '悪い口コミ投稿', count: 2, kind: 'attack', icon: '👎', desc: '今期、相手のサービス収入が半分' },
+  A5: { name: '情報漏洩の噂', count: 2, kind: 'attack', icon: '📰', desc: '今期、相手の入札はすべて無効' },
+  A6: { name: '無茶振りクライアント紹介', count: 3, kind: 'attack', icon: '🤯', desc: '相手の進行中案件1つの必要進捗+1（納期はそのまま）' },
+  A7: { name: '技術ブログで炎上', count: 3, kind: 'attack', icon: '🔥', desc: '相手の負債+2' },
+  A8: { name: '採用広告の買い占め', count: 2, kind: 'attack', icon: '🪧', desc: '今期、相手は採用できない' },
+  A9: { name: '特許トロール', count: 2, kind: 'attack', icon: '🧌', desc: 'サービスを持つ相手から3期にわたり毎期50' },
+  S1: { name: '安値ダンピング', count: 3, kind: 'self', icon: '🏷️', desc: '自分に使う。今期の自分の入札額×0.8' },
+  D1: { name: '福利厚生の充実', count: 2, kind: 'defense', icon: '🍱', desc: 'ヘッドハンティングを防ぐ', blocks: ['A1'] },
+  D2: { name: '社内の飲み会文化', count: 2, kind: 'defense', icon: '🍻', desc: '退職代行・Slack爆撃を防ぐ', blocks: ['A2', 'A3'] },
+  D3: { name: 'カウンターオファー', count: 1, kind: 'defense', icon: '🔁', desc: 'ヘッドハンティングを防ぎ、逆に相手のエースを奪う', blocks: ['A1'] },
+  D4: { name: 'ホワイト企業認定', count: 1, kind: 'defense', icon: '🏳️', desc: 'ヘッドハンティング・退職代行・採用広告の買い占めを防ぐ', blocks: ['A1', 'A2', 'A8'] },
+  D5: { name: '法務チーム', count: 2, kind: 'defense', icon: '⚖️', desc: '悪い口コミ・情報漏洩を防ぎ、相手に罰金100', blocks: ['A4', 'A5'] },
+  D6: { name: '鉄壁のセキュリティ', count: 2, kind: 'defense', icon: '🛡️', desc: '情報漏洩・技術ブログ炎上を防ぐ', blocks: ['A5', 'A7'] },
+  D7: { name: '強いPM', count: 2, kind: 'defense', icon: '📋', desc: '無茶振りクライアントを防ぐ', blocks: ['A6'] },
+  D8: { name: '顧問弁護士', count: 1, kind: 'defense', icon: '👔', desc: '特許トロールを防ぎ、相手から200を受け取る', blocks: ['A9'] },
+  D9: { name: 'ダミー情報', count: 2, kind: 'defense', icon: '🪞', desc: 'すべての妨害を相手に跳ね返す', blocks: ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9'] },
+};
+export const DEFENSE_ORDER: CardKey[] = ['D3', 'D1', 'D2', 'D4', 'D5', 'D6', 'D7', 'D8', 'D9'];
+export const DEFENSE_FX = { D5fine: 100, D8take: 200 };
+
+// ---------- ハプニング ----------
+export const HAPPENINGS: Record<HappeningKey, { name: string; desc: string; icon: string; when: 'start' | 'dev' }> = {
+  H1: { name: '大規模クラウド障害', icon: '☁️', when: 'dev', desc: 'インフラスキルを持つ出勤社員がいない会社は作業停止' },
+  H2: { name: '新卒の大量入社', icon: '🌸', when: 'start', desc: '採用候補に新人2人が追加' },
+  H3: { name: '為替の急変動', icon: '💱', when: 'start', desc: '進行中の海外案件の報酬が50%で2倍か半分に' },
+  H4: { name: 'セキュリティ事故のニュース', icon: '🚨', when: 'start', desc: 'セキュリティが必要な案件の予算×1.3' },
+  H5: { name: '景気後退', icon: '📉', when: 'start', desc: '今期の案件の予算×0.8' },
+  H6: { name: 'バズるプログラミング言語', icon: '📈', when: 'start', desc: 'ランダムなスキル1種を持つ全社員のそのスキル+1・給料+10' },
+  H7: { name: 'オフィスの賃料値上げ', icon: '🏢', when: 'start', desc: '社員数×10を支払う' },
+  H8: { name: 'インフルエンザ流行', icon: '🤒', when: 'start', desc: '各社ランダムな社員1人が今期休み' },
+  H9: { name: 'リモートワーク解禁', icon: '🏠', when: 'dev', desc: '今期の給料×0.7' },
+  H10: { name: '大型連休', icon: '🎌', when: 'start', desc: '進行中の全案件の納期+1' },
+  H11: { name: '人気技術書の出版', icon: '📘', when: 'start', desc: 'ランダムなスキル1種を持つ全社員のそのスキル+1' },
+  H12: { name: '巨大IT企業の参入', icon: '🦖', when: 'start', desc: '今期の案件が1件少ない' },
+  H13: { name: '補助金の公募', icon: '💴', when: 'start', desc: 'サービスLv1以上の会社に+200' },
+  H14: { name: '伝説のエンジニアが独立', icon: '🧙', when: 'start', desc: '採用候補に伝説のエンジニアが1人追加' },
+  H15: { name: '全社停電', icon: '🔌', when: 'dev', desc: '今期は全社の作業が停止' },
+  H16: { name: 'バグ報奨金ブーム', icon: '🐛', when: 'start', desc: '負債4以上は負債×50を支払い、負債1以下は+100' },
+  H17: { name: '業界カンファレンス', icon: '🎤', when: 'start', desc: '全社が作戦カードを1枚追加で引く' },
+  H18: { name: '生成AIブーム', icon: '🤖', when: 'start', desc: 'AI案件の予算×1.5、AIスキル持ちのAI+1' },
+};
+export const HAPPENING_FX = { secNews: 1.3, recession: 0.8, aiBoom: 1.5, rentPerHead: 10, subsidy: 200, bounty: { high: 4, perDebt: 50, low: 1, reward: 100 } };
+
+// ---------- 最終決算の表彰（追加要素） ----------
+export const AWARDS = true;
