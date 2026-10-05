@@ -151,7 +151,7 @@ function ProjectDevCard({ g, me, p, assign, rush, locked, onOpen, onFill, onRemo
       </div>
       <div className="proj-name">{p.name}</div>
       <div className="row note" style={{ flexWrap: 'wrap', gap: 10 }}>
-        <span>契約額 <b className="gold num">{p.price.toLocaleString()}</b>万円{p.pay === 'turn' ? '（毎期払い）' : ''}</span>
+        <span>契約額 <b className="gold num">{p.price.toLocaleString()}</b>万円{p.pay === 'turn' ? '（毎期払い）' : p.paid ? `（中間金 ${p.paid.toLocaleString()} 受取済み）` : ''}</span>
         <span className={late ? 'down' : left <= 0 ? 'gold' : ''}>納期 {quarterLabel(p.deadline)}{late ? `（${g.q - p.deadline}期遅れ・報酬−${(g.q - p.deadline) * 10}%）` : left === 0 ? '（今期まで！）' : `（あと${left}期）`}</span>
       </div>
       <div className="pbar"><i className="next" style={{ width: `${after / p.work * 100}%` }} /><i style={{ width: `${p.progress / p.work * 100}%` }} /></div>

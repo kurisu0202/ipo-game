@@ -25,6 +25,7 @@ export interface Project {
 export interface ActiveProject extends Project {
   price: number; progress: number; work: number;
   start: number; deadline: number; rush: boolean; fx: number;
+  paid?: number;   // 受け取り済みの中間金
 }
 
 export interface RentalOffer { id: string; from: string; engineerId: string; period: 1 | 2 | 3; share: 10 | 20 | 30; spy: SpyOrder | '' }

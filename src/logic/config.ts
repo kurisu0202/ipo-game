@@ -13,7 +13,7 @@ export const GAME = {
   quarters: 12,
   minPlayers: 2,
   maxPlayers: 4,
-  startCash: 1000,
+  startCash: 2000,
   startEngineers: [
     { skills: { BE: 3, IN: 1 }, salary: 60 },
     { skills: { FE: 3, DE: 1 }, salary: 60 },
@@ -48,7 +48,7 @@ export const PROJECT_TYPES: Record<ProjectType, ProjectSpec> = {
   design: { name: 'デザイン重視', icon: '✨', desc: 'デザインを必要量+2以上で報酬×1.3', weight: 2, dur: [2, 3], rpq: 230, req: [4, 5], cand: ['FE'], must: 'DE', pay: 'lump' },
   secret: { name: '極秘案件', icon: '🕶️', desc: '予算は非公開。完了時に×0.5〜×3', weight: 1, dur: [2, 3], rpq: 260, req: [4, 6], cand: ['FE', 'BE', 'IN', 'DE', 'SE', 'AI'], pay: 'lump' },
 };
-export const BUDGET = { rate: 1.15, longBonus: 0.08 };   // 予算 = rpq×1.15×期間×(1+0.08×(期間−1))×タグ倍率
+export const BUDGET = { rate: 1.5, longBonus: 0.08 };   // 予算 = rpq×1.5×期間×(1+0.08×(期間−1))×タグ倍率
 export const MUST_SHARE = 0.45;                         // 必須スキルの割合
 export const TAG_CHANCE = 0.5;
 export const TAGS: Record<Tag, { name: string; desc: string; mult?: number }> = {
@@ -64,6 +64,7 @@ export const BIG_GOV = { minDur: 4, rpq: 300, mult: 1.4 };  // 秋の官公庁�
 export const DESIGN_BONUS = { extra: 2, mult: 1.3 };
 export const SECRET_MULTS = [0.5, 1, 1.5, 2, 3];
 export const LATE_PENALTY = 0.1;
+export const INTERIM = 0.5;   // 一括払いの案件：進んだ期ごとに受注額×0.5÷期間 を中間金として先に受け取る（残りは完了時）
 export const REPEAT_BONUS = 100;
 export const STOCK_CHANCE = 0.5;
 export const STOCK_VALUES = [0, 0, 300, 800, 2000];

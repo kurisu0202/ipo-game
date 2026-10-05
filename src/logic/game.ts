@@ -5,7 +5,7 @@
 import {
   ACCUSE, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
   EMPLOYEE_EVENT, ENGINEER, FIRE_DEBT, FIRST_NAMES, GAME, HACKATHON, HAPPENINGS, HAPPENING_FX, HIRE_FEES, INCIDENT,
-  INTEREST, INVESTIGATE_COST, LAST_NAMES, LATE_PENALTY, MUST_SHARE, PROJECT_TYPES, REMOTE_SALARY, RENTAL, REPEAT_BONUS,
+  INTERIM, INTEREST, INVESTIGATE_COST, LAST_NAMES, LATE_PENALTY, MUST_SHARE, PROJECT_TYPES, REMOTE_SALARY, RENTAL, REPEAT_BONUS,
   REP_DISCOUNT, RUSH_DEBT, SECRET_MULTS, SERVICE, SEVERANCE_QUARTERS, SKILLS, SKILL_NAME, SPY_STEAL,
   STOCK_CHANCE, STOCK_VALUES, TAGS, TAG_CHANCE, TROLL,
 } from './config';
@@ -669,6 +669,13 @@ export function resolveDev(g: Game) {
         const net = payout(g, c, p, team, gross, ledgers);
         L(c, `「${p.name}」保守料 +${net}`, 'good');
       }
+      // 一括払い：進んだ分の中間金（完了する期は完了時にまとめて受け取る）
+      if (p.pay === 'lump' && steps > 0 && p.progress < p.work) {
+        const gross = round10(p.price * INTERIM / p.work * steps);
+        p.paid = (p.paid || 0) + gross;
+        const net = payout(g, c, p, team, gross, ledgers);
+        L(c, `「${p.name}」中間金 +${net}`, 'good');
+      }
       // 完了
       if (p.progress >= p.work) completeProject(g, c, p, team, ledgers, headlines);
     }
@@ -877,7 +884,8 @@ function completeProject(g: Game, c: Company, p: ActiveProject, team: Engineer[]
       notes.push(`極秘倍率×${m}`);
       if (m >= 2) { lg.jackpot = true; headlines.push(`${c.name}、極秘案件で大当たり（×${m}）`); }
     }
-    const gross = round10(v);
+    if (p.paid) notes.push(`中間金${p.paid}を除く`);
+    const gross = Math.max(0, round10(v) - (p.paid || 0));
     const net = payout(g, c, p, team, gross, ledgers);
     lg.lines.push({ text: `💰「${p.name}」完了！ +${net}${notes.length ? `（${notes.join('・')}）` : ''}`, tone: 'gold' });
     lg.jackpot = true;

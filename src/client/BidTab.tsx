@@ -1,6 +1,6 @@
 // ===== 入札タブ =====
 import { useState } from 'react';
-import { BID_PCTS, CARDS, DESIGN_BONUS, DUMP_RATE, ENGINEER, FIRE_DEBT, GAME, HIRE_FEES, LATE_PENALTY, PROJECT_TYPES, REPEAT_BONUS, REP_DISCOUNT, SECRET_MULTS, SKILLS, SKILL_NAME, STOCK_CHANCE, TAGS } from '../logic/config';
+import { BID_PCTS, CARDS, DESIGN_BONUS, INTERIM, DUMP_RATE, ENGINEER, FIRE_DEBT, GAME, HIRE_FEES, LATE_PENALTY, PROJECT_TYPES, REPEAT_BONUS, REP_DISCOUNT, SECRET_MULTS, SKILLS, SKILL_NAME, STOCK_CHANCE, TAGS } from '../logic/config';
 import { checkReqs, quarterLabel, round10, skillSum, sumSkills } from '../logic/calc';
 import { bidAmount, pendingSpies } from '../logic/game';
 import type { BidPct, BidSubmit, CardKey, Company, Game, HireFee, Project, Skills } from '../logic/types';
@@ -139,7 +139,7 @@ function ProjectBidCard({ g, me, p, pct, dumping, locked, onPick }: { g: Game; m
       <div className="proj-desc">{spec.desc}</div>
       <div className="money-row">
         {secret ? <span className="num" style={{ fontSize: 20 }}>予算 ？？？</span> : <span className="num">{p.budget.toLocaleString()}<small>万円</small></span>}
-        <span className="chip">{p.pay === 'turn' ? '毎期払い' : '完了時に一括'}</span>
+        <span className="chip">{p.pay === 'turn' ? '毎期払い' : '中間金＋完了時'}</span>
         <button className="chip blue" style={{ marginLeft: 'auto' }} onClick={() => setInfo(true)}>💰 利益の目安</button>
       </div>
       <SkillChips skills={p.reqs} />
@@ -186,7 +186,7 @@ function ProjectDetail({ g, me, p, pct, dumping, onClose }: { g: Game; me: Compa
   const diff = haggle || p.tags.includes('repeat');   // 受注額と受け取りが違うときだけ列を出す
   const when = p.pay === 'turn'
     ? `進んだ期ごとに、その期の決算で 受注額÷${p.duration} ずつ（最短 ${quarterLabel(g.q)}〜${quarterLabel(Math.min(doneQ, last))}）`
-    : `完了した期の決算で一括（最短 ${quarterLabel(Math.min(doneQ, last))}）`;
+    : `進んだ期ごとに中間金（受注額の${INTERIM * 100}%÷${p.duration}）を受け取り、残りは完了した期の決算で（最短 ${quarterLabel(Math.min(doneQ, last))}）`;
   const notes: string[] = [];
   if (haggle) notes.push(`値切り屋：受け取りは受注額の×${TAGS.haggle.mult}`);
   if (p.tags.includes('repeat')) notes.push(`リピートあり：完了時に+${REPEAT_BONUS}（表に含めています）`);
@@ -200,12 +200,12 @@ function ProjectDetail({ g, me, p, pct, dumping, onClose }: { g: Game; me: Compa
   if (p.type === 'ai') notes.push('AI案件：完了でAIノウハウ+1');
   if (secret) notes.push(`極秘案件：予算は非公開。完了時に×${SECRET_MULTS[0]}〜×${SECRET_MULTS[SECRET_MULTS.length - 1]}のどれかになる`);
   return (
-    <Sheet onClose={onClose} title={<>{spec.icon} {p.name}</>} sub={`${spec.name}・${p.duration}期・${p.pay === 'turn' ? '毎期払い' : '完了時に一括'}`}>
+    <Sheet onClose={onClose} title={<>{spec.icon} {p.name}</>} sub={`${spec.name}・${p.duration}期・${p.pay === 'turn' ? '毎期払い' : '中間金＋完了時'}`}>
       <div className="card">
         <b>💰 お金が入るのは</b>
         <p style={{ margin: '6px 0 0' }}>{when}</p>
         {tooLate
-          ? <div className="warn" style={{ marginTop: 8 }}>⚠ 普通に進めると{GAME.quarters}期目（{quarterLabel(last)}）までに終わりません。突貫（1期で2進む・負債+2）が必要です。終わらなかった分は受け取れません</div>
+          ? <div className="warn" style={{ marginTop: 8 }}>⚠ 普通に進めると{GAME.quarters}期目（{quarterLabel(last)}）までに終わりません。突貫（1期で2進む・負債+2）が必要です。受け取れるのは進んだ分の中間金だけです</div>
           : <p className="note" style={{ margin: '6px 0 0' }}>必要スキルを満たす社員を割り当てると1期に1進みます。足りない期は進まず、締切（{quarterLabel(doneQ)}）より遅れると1期ごとに報酬−{LATE_PENALTY * 100}%</p>}
       </div>
       <div className="card">
