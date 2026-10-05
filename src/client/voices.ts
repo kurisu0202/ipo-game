@@ -141,6 +141,7 @@ const DEBT = ['技術的負債、たまってますよ…', 'そろそろ本番�
 const REP = ['うちの評判、業界で話題ですよ', '「{co}さんなら安心」って言われました', '評判がいいと仕事が来ますね'];
 const FIRST = ['いよいよ創業ですね！', '{co}の歴史が今始まる', '最初の案件、絶対取りましょう'];
 const LAST = ['いよいよ最後の期ですね…', '上場まであと少し！🔔', '最後まで走り切りましょう', 'ここで逆転できるかも'];
+const TRAINED = ['研修、めちゃくちゃ勉強になりました📚', '研修で覚えたこと、早く使いたい！', '研修の資格試験、受かりました🎉', '研修先のお弁当がおいしかった', '頭がパンパンです…でも成長した気がする', '研修のおかげで視野が広がりました'];
 const GROW = ['もうすぐ{skill}がレベルアップしそうです📈', '最近、手応えあります', '成長してる実感があります'];
 
 // ---------- 業種 ----------
@@ -170,6 +171,7 @@ const RULES: Rule[] = [
   R(6, x => x.e.via === 'hh', HH),
   R(3, x => !!x.e.via, WHISPER),
   R(30, x => !working(x.g, x.e), REST),
+  R(25, x => x.e.trainedQ !== undefined && x.g.q - x.e.trainedQ <= 2, TRAINED),
   R(4, x => !!x.top, x => SKILL_LINES[x.top!]),
   R(3, always, x => SEASON_LINES[season(x.g.q)]),
   R(4, always, x => HAP_LINES[x.g.happenings[x.g.q]] || []),
@@ -216,5 +218,5 @@ export function pickVoice(g: Game, me: Company, recent: string[]): { e: Engineer
 }
 
 /** せりふの総数 */
-export const VOICE_COUNT = [GENERAL, BID, DEV, IDLE, ON_PROJ, SHORT, LATE, DUE, DONE_SOON, SVC, ROOKIE, LEGEND, RENTED, HH, WHISPER, REST, RICH, POOR, NEG, DEBT, REP, FIRST, LAST, GROW,
+export const VOICE_COUNT = [GENERAL, BID, DEV, IDLE, ON_PROJ, SHORT, LATE, DUE, DONE_SOON, SVC, ROOKIE, LEGEND, RENTED, HH, WHISPER, REST, RICH, POOR, NEG, DEBT, REP, FIRST, LAST, GROW, TRAINED,
   ...Object.values(SKILL_LINES), ...SEASON_LINES, ...Object.values(HAP_LINES), ...Object.values(INDUSTRY_LINES)].reduce((t, a) => t + (a?.length || 0), 0);

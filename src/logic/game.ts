@@ -3,7 +3,7 @@
 //  すべての乱数は g.seed から作るので、同じ入力なら同じ結果になる
 // =====================================================================
 import {
-  ABANDON, ACCUSE, GROWTH, INDUSTRIES, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
+  ABANDON, ACCUSE, GROWTH, INDUSTRIES, TRAINING, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
   EMPLOYEE_EVENT, ENGINEER, FIRE_DEBT, FIRST_NAMES, GAME, HACKATHON, HAPPENINGS, HAPPENING_FX, HIRE_FEES, INCIDENT,
   INTERIM, INTEREST, INVESTIGATE_COST, LAST_NAMES, LATE_PENALTY, MUST_SHARE, PROJECT_TYPES, REMOTE_SALARY, RENTAL, REPEAT_BONUS,
   REP_DISCOUNT, SECRET_MULTS, SERVICE, SEVERANCE_QUARTERS, SKILLS, SKILL_NAME, SPY_STEAL,
@@ -321,6 +321,7 @@ function cleanDev(g: Game, cid: string, s: DevSubmit): DevSubmit {
     const v = s.assign?.[e.id];
     if (v === undefined) continue;
     if (v === '' || (v === 'svc' && willHaveSvc) || (v === 'fire' && !e.loan) || c.projects.some(p => p.id === v)) out.assign[e.id] = v;
+    else if (v === 'train' && canTrain(g, e, s.train?.[e.id])) { out.assign[e.id] = 'train'; (out.train ??= {})[e.id] = s.train![e.id]; }
   }
   out.drop = [...new Set((s.drop || []).filter(id => c.projects.some(p => p.id === id)))];
   for (const e of c.engineers) if (out.drop.includes(out.assign[e.id])) out.assign[e.id] = '';
@@ -644,6 +645,27 @@ function gainXp(c: Company, e: Engineer, reqs: Skills, ledgers: Record<string, L
   }
 }
 
+/** 研修に行けるか：自社の社員（借りている人は不可）で、今期出勤していて、伸ばすスキルが上限未満 */
+export function canTrain(g: Game, e: Engineer, k: Skill | undefined): boolean {
+  return !!k && SKILLS.includes(k) && !e.loan && working(g, e) && (e.skills[k] || 0) < GROWTH.maxSkill;
+}
+
+/** 研修の結果：スキル+1（新しく習得も）・給料アップ・来期は休み */
+function doTraining(g: Game, c: Company, s: DevSubmit, L: (c: Company, text: string, tone?: RevealLine['tone']) => void) {
+  for (const [eid, k] of Object.entries(s.train || {})) {
+    const e = c.engineers.find(x => x.id === eid);
+    if (!e || s.assign[eid] !== 'train') continue;
+    const lv = e.skills[k] || 0;
+    e.skills[k] = lv + 1;
+    if (e.xp) delete e.xp[k];
+    e.salary += TRAINING.raise;
+    e.restQ = g.q + 1;
+    e.trainedQ = g.q;
+    if (TRAINING.fee) c.cash -= TRAINING.fee;
+    L(c, `📚 ${e.name} が研修で${SKILL_NAME[k]}${lv ? ` ${lv}→${lv + 1}` : 'を新しく習得'}！（給料+${TRAINING.raise}・来期は休み${TRAINING.fee ? `・研修費 −${TRAINING.fee}` : ''}）`, 'good');
+  }
+}
+
 /** 途中放棄の違約金 */
 export const abandonFee = (p: ActiveProject) => round10(p.price * ABANDON.penalty);
 
@@ -724,9 +746,10 @@ export function resolveDev(g: Game) {
     for (const e of c.engineers) {
       const v = s.assign[e.id];
       if (v === undefined) continue;
-      e.assign = v === '' || v === 'fire' ? null : v;
+      e.assign = v === '' || v === 'fire' || v === 'train' ? null : v;
     }
     c.projects.forEach(p => { p.rush = s.rush.includes(p.id); });
+    doTraining(g, c, s, L);
 
     // 9. 作業停止
     const stopped = h === 'H15' || (h === 'H1' && !c.engineers.some(e => working(g, e) && (effSkills(g, c, e, true).IN || 0) > 0));

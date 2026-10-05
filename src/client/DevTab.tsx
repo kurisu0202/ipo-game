@@ -1,8 +1,8 @@
 // ===== 開発タブ =====
 import { useState } from 'react';
-import { ABANDON, GROWTH, INVESTIGATE_COST, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS, xpNeed } from '../logic/config';
-import { assignees, effSkills, launchCost, projectCheck, quarterLabel, rushDebt, serviceIncome, servicePower, skillSum, sumSkills, working } from '../logic/calc';
-import { abandonFee, pendingSpies } from '../logic/game';
+import { ABANDON, GROWTH, INVESTIGATE_COST, TRAINING, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS, xpNeed } from '../logic/config';
+import { assignees, effSkills, launchCost, projectCheck, quarterLabel, rushDebt, serviceIncome, servicePower, skillSum, sumSkills, totalQ, working } from '../logic/calc';
+import { abandonFee, canTrain, pendingSpies } from '../logic/game';
 import type { ActiveProject, Company, DevSubmit, Engineer, Game, Skill, SpyOrder } from '../logic/types';
 import type { PlayerView } from '../logic/view';
 import { Coach, SecretFile } from './parts';
@@ -85,6 +85,10 @@ export function DevTab({ v, me, draft, set, locked }: P) {
       <ServiceCard g={g} me={me} draft={draft} assign={assign} locked={locked} onOpen={() => setSheet('svc')} onRemove={eid => setAssign(eid, '')}
         onLaunch={() => { sfx.coin(); set(d => ({ ...d, launch: !d.launch, assign: d.launch ? Object.fromEntries(Object.entries(d.assign).map(([k, x]) => [k, x === 'svc' ? '' : x])) : d.assign })); }} />
 
+      <TrainCard g={g} me={me} draft={draft} locked={locked}
+        onTrain={(eid, k) => { sfx.tap(); set(d => ({ ...d, assign: { ...d.assign, [eid]: 'train' }, train: { ...(d.train || {}), [eid]: k } })); }}
+        onCancel={eid => { sfx.tap(); set(d => { const t = { ...(d.train || {}) }; delete t[eid]; return { ...d, assign: { ...d.assign, [eid]: '' }, train: t }; }); }} />
+
       <BackOps g={g} me={me} draft={draft} set={set} locked={locked} />
 
       <details className="fold">
@@ -117,9 +121,62 @@ export function DevTab({ v, me, draft, set, locked }: P) {
 
 export function placeName(me: Company, a: string) {
   if (a === 'fire') return '解雇予定';
+  if (a === 'train') return '研修';
   if (a === 'svc') return 'サービス担当';
   if (!a) return '待機';
   return `「${me.projects.find(p => p.id === a)?.name || '案件'}」担当`;
+}
+
+/** 研修：空いている社員を研修に行かせる（スキル+1・新スキル習得。来期は休み） */
+function TrainCard({ g, me, draft, locked, onTrain, onCancel }: {
+  g: Game; me: Company; draft: DevSubmit; locked: boolean; onTrain: (eid: string, k: Skill) => void; onCancel: (eid: string) => void;
+}) {
+  const [pickFor, setPickFor] = useState<Engineer | null>(null);
+  const a = draft.assign as Record<string, string>;
+  const list = me.engineers.filter(e => !e.loan && working(g, e) && ((a[e.id] ?? '') === '' || a[e.id] === 'train'));
+  const last = g.q >= totalQ(g) - 1;
+  return (
+    <>
+      <div className="sec-title">📚 研修 <small>空いている社員のスキルを伸ばす・来期は休み</small></div>
+      <div className="card">
+        {list.length === 0 && <div className="note">今期は空いている社員がいません（案件・サービスの担当から外すと研修に行けます）</div>}
+        {last && list.length > 0 && <div className="warn" style={{ marginBottom: 8 }}>⚠ 最後の期です。研修しても活かす期がありません</div>}
+        {list.map(e => {
+          const k = a[e.id] === 'train' ? draft.train?.[e.id] : undefined;
+          const lv = k ? e.skills[k] || 0 : 0;
+          return (
+            <div className="member" key={e.id}>
+              <Face name={e.name} size={26} />
+              <div className="grow" style={{ minWidth: 0 }}>
+                <span className="nm">{e.name}</span>
+                {k ? <div className="note up">📚 {SKILL_ICON[k]}{SKILL_NAME[k]} {lv ? `${lv}→${lv + 1}` : '新しく習得（0→1）'}・来期は休み</div>
+                  : <div style={{ marginTop: 2 }}><SkillChips skills={e.skills} /></div>}
+              </div>
+              {!locked && (k ? <button className="btn xs" onClick={() => onCancel(e.id)}>取消</button> : <button className="btn xs" onClick={() => setPickFor(e)}>研修へ</button>)}
+            </div>
+          );
+        })}
+        <div className="note" style={{ marginTop: 8 }}>研修した社員は、選んだスキルが+1（持っていなければ新しく習得）、給料+{TRAINING.raise}。今期の決算で反映され、来期は1期お休みです{TRAINING.fee ? `（研修費 ${TRAINING.fee}万円）` : ''}。</div>
+      </div>
+      {pickFor && (
+        <Sheet onClose={() => setPickFor(null)} title={<>📚 {pickFor.name} の研修</>} sub="伸ばすスキルを選んでください（来期は休み）">
+          {SKILLS.map(k => {
+            const lv = pickFor.skills[k] || 0;
+            const ok = canTrain(g, pickFor, k);
+            const need = me.projects.reduce((t, p) => t + (p.reqs[k] || 0), 0);
+            return (
+              <button key={k} className="card" style={{ width: '100%', textAlign: 'left', display: 'block' }} disabled={!ok}
+                onClick={() => { onTrain(pickFor.id, k); setPickFor(null); }}>
+                <div className="row"><span style={{ fontSize: 22 }}>{SKILL_ICON[k]}</span>
+                  <div className="grow"><b>{SKILL_NAME[k]}</b> <span className={lv ? '' : 'up'}>{!ok ? `${lv}（上限）` : lv ? `${lv} → ${lv + 1}` : '新しく習得 0 → 1'}</span>
+                    {need > 0 && <div className="note">進行中の案件で必要：{SKILL_NAME[k]} 合計{need}</div>}</div></div>
+              </button>
+            );
+          })}
+        </Sheet>
+      )}
+    </>
+  );
 }
 
 /** 経験値の進み具合（例：📈 バック 2/4） */
@@ -435,6 +492,7 @@ export function devSummary(g: Game, me: Company, d: DevSubmit) {
   const stuck = live.filter(p => !projectCheck(g, me, p, a).ok).length;
   const idle = me.engineers.filter(e => working(g, e) && !(a[e.id] ?? '')).length;
   const fired = Object.values(a).filter(x => x === 'fire').length;
+  const trained = Object.values(a).filter(x => x === 'train').length;
   const parts: { t: string; w?: boolean }[] = [];
   if (stuck) parts.push({ t: `⚠ 進まない案件 ${stuck}件`, w: true });
   else if (live.length) parts.push({ t: `✓ 案件 ${live.length}件すべて進行` });
@@ -442,6 +500,7 @@ export function devSummary(g: Game, me: Company, d: DevSubmit) {
   if (idle) parts.push({ t: `待機 ${idle}人` });
   if (d.rush.length) parts.push({ t: `突貫 ${d.rush.length}件`, w: true });
   if (fired) parts.push({ t: `解雇 ${fired}人`, w: true });
+  if (trained) parts.push({ t: `研修 ${trained}人` });
   if (d.launch) parts.push({ t: 'サービス立ち上げ' });
   if (d.offer) parts.push({ t: 'レンタル出品' });
   if (d.accuse) parts.push({ t: '告発', w: true });

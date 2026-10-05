@@ -17,6 +17,7 @@ export interface Engineer {
   spy?: { for: string; order: SpyOrder | null; src: 'rent' | 'hh' };
   checked?: 'spy' | 'clean';
   xp?: Skills;   // 経験値（スキルごと）
+  trainedQ?: number;   // 最後に研修に行った期
 }
 
 export interface Project {
@@ -71,7 +72,8 @@ export interface BidSubmit {
 export interface PickSubmit { industry: IndustryKey }
 
 export interface DevSubmit {
-  assign: Record<string, string | 'svc' | '' | 'fire'>;
+  assign: Record<string, string | 'svc' | '' | 'fire' | 'train'>;
+  train?: Record<string, Skill>;   // 研修に行かせる社員 → 伸ばすスキル
   rush: string[];
   drop?: string[];   // 放棄する案件
   launch: boolean;

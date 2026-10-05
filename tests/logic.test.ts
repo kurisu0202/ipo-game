@@ -313,3 +313,36 @@ describe('業種', () => {
     expect(b.cash - a.cash).toBe(100);   // 1000 と 900（給料は同じ）
   });
 });
+
+describe('研修', () => {
+  const setup = () => {
+    const g = two(); cleanHands(g);
+    g.q = 0; g.phase = 'dev';
+    const a = co(g, 'a');
+    a.engineers = [eng('e1', { BE: 2 }, { xp: { BE: 1 } }), eng('e2', { FE: 5 }), eng('e3', { IN: 1 }, { loan: { from: 'b', until: 3, share: 10 } })];
+    a.projects = [];
+    return g;
+  };
+  it('持っているスキルは+1・持っていないスキルは習得。給料+5で来期は休み', () => {
+    const g = setup();
+    devOnly(g, (c, s) => { if (c.id === 'a') { s.assign.e1 = 'train'; s.train = { e1: 'BE' }; } });
+    const e1 = co(g, 'a').engineers.find(e => e.id === 'e1')!;
+    expect(e1.skills.BE).toBe(3);
+    expect(e1.xp?.BE).toBeUndefined();
+    expect(e1.salary).toBe(55);
+    expect(e1.restQ).toBe(1);
+    const g2 = setup();
+    devOnly(g2, (c, s) => { if (c.id === 'a') { s.assign.e1 = 'train'; s.train = { e1: 'AI' }; } });
+    expect(co(g2, 'a').engineers.find(e => e.id === 'e1')!.skills).toEqual({ BE: 2, AI: 1 });
+  });
+  it('上限のスキル・借りている社員・今期休みの社員は研修に行けない', () => {
+    const g = setup();
+    co(g, 'a').engineers.find(e => e.id === 'e1')!.restQ = 0;
+    const s = defaultDev(g, 'a');
+    s.assign = { e1: 'train', e2: 'train', e3: 'train' };
+    s.train = { e1: 'BE', e2: 'FE', e3: 'IN' };
+    submit(g, 'a', s);
+    expect(g.devSubs.a.train).toBeUndefined();
+    expect(Object.values(g.devSubs.a.assign).filter(v => v === 'train')).toHaveLength(0);
+  });
+});

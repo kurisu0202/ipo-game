@@ -69,6 +69,8 @@ export const LATE_PENALTY = 0.1;
 //        「今のレベル+1」たまるとスキル+1・給料+raise（最大 maxSkill）
 export const GROWTH = { maxSkill: 5, raise: 5 };
 export const xpNeed = (lv: number) => lv + 1;
+// 研修：開発フェーズで空いている社員を研修へ。選んだスキルが+1（持っていなければ1で習得）、給料+raise、来期は休み
+export const TRAINING = { fee: 0, raise: 5 };
 export const ABANDON = { penalty: 0.2, rep: -1 };   // 案件の途中放棄：違約金＝受注額×0.2、評判−1（受け取り済みの中間金は返さない）
 export const INTERIM = 0.5;   // 一括払いの案件：進んだ期ごとに受注額×0.5÷期間 を中間金として先に受け取る（残りは完了時）
 export const REPEAT_BONUS = 100;
