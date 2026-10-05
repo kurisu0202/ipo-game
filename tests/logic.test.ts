@@ -201,3 +201,35 @@ describe('決定論', () => {
     expect(run()).toBe(run());
   });
 });
+
+describe('途中放棄', () => {
+  const setup = () => {
+    const g = two(); cleanHands(g);
+    g.q = 0; g.phase = 'dev';
+    const a = co(g, 'a');
+    a.engineers = [eng('e1', { BE: 2 }, { assign: 'p1' })];
+    a.projects = [active('p1', 1000, { SE: 99 }, { work: 3, progress: 1, paid: 170 })];
+    return g;
+  };
+  it('違約金20%・評判−1を払って案件が消え、中間金は返さない', () => {
+    const keep = setup();
+    devOnly(keep);
+    const drop = setup();
+    devOnly(drop, (c, s) => { if (c.id === 'a') s.drop = ['p1']; });
+    const a0 = co(keep, 'a'), a1 = co(drop, 'a');
+    expect(a1.projects).toHaveLength(0);
+    expect(a0.cash - a1.cash).toBe(200);
+    expect(a1.rep).toBe(a0.rep - 1);
+    expect(a1.engineers[0].assign).toBeNull();
+  });
+  it('放棄する案件への割り当てと突貫は無効になり、ない案件は無視される', () => {
+    const g = setup();
+    const s = defaultDev(g, 'a');
+    s.drop = ['p1', 'p1', 'nope'];
+    s.rush = ['p1'];
+    submit(g, 'a', s);
+    expect(g.devSubs.a.drop).toEqual(['p1']);
+    expect(g.devSubs.a.rush).toEqual([]);
+    expect(g.devSubs.a.assign.e1).toBe('');
+  });
+});

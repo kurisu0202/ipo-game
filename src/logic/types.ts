@@ -67,6 +67,7 @@ export interface BidSubmit {
 export interface DevSubmit {
   assign: Record<string, string | 'svc' | '' | 'fire'>;
   rush: string[];
+  drop?: string[];   // 放棄する案件
   launch: boolean;
   offer?: { engineerId: string; period: number; share: number; spy: SpyOrder | '' };
   sleeper: string | '';

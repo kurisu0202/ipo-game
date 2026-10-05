@@ -1,8 +1,8 @@
 // ===== 開発タブ =====
 import { useState } from 'react';
-import { INVESTIGATE_COST, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS } from '../logic/config';
+import { ABANDON, INVESTIGATE_COST, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS } from '../logic/config';
 import { assignees, effSkills, projectCheck, quarterLabel, servicePower, skillSum, working } from '../logic/calc';
-import { pendingSpies } from '../logic/game';
+import { abandonFee, pendingSpies } from '../logic/game';
 import type { ActiveProject, Company, DevSubmit, Engineer, Game, Skill, SpyOrder } from '../logic/types';
 import type { PlayerView } from '../logic/view';
 import { Coach, SecretFile } from './parts';
@@ -52,8 +52,31 @@ export function DevTab({ v, me, draft, set, locked }: P) {
 
       <div className="sec-title">🛠️ 進行中の案件 <span className="n">{me.projects.length}</span></div>
       {me.projects.length === 0 && <div className="empty">進行中の案件はありません。待機中の社員は負債を返す（リファクタリング）か、サービスに回しましょう</div>}
-      {me.projects.map(p => (
+      {me.projects.map(p => (draft.drop || []).includes(p.id) ? (
+        <div className="card dropped" key={p.id}>
+          <div className="row">
+            <div className="grow"><b>🗑️ {p.name}</b><div className="note">放棄予定：違約金 −{abandonFee(p).toLocaleString()}万円・評判{ABANDON.rep}{p.paid ? `（受取済みの中間金 ${p.paid.toLocaleString()} は返さなくてOK）` : ''}</div></div>
+            {!locked && <button className="btn sm" onClick={() => { sfx.tap(); set(d => ({ ...d, drop: (d.drop || []).filter(x => x !== p.id) })); }}>取り消す</button>}
+          </div>
+        </div>
+      ) : (
         <ProjectDevCard key={p.id} g={g} me={me} p={p} assign={assign} rush={draft.rush.includes(p.id)} locked={locked}
+          onDrop={() => {
+            if (!confirm(`「${p.name}」を途中放棄しますか？
+
+・違約金 ${abandonFee(p).toLocaleString()}万円（受注額の${ABANDON.penalty * 100}%）
+・評判${ABANDON.rep}
+・これまでの進捗は失われます${p.paid ? `
+・受け取り済みの中間金 ${p.paid.toLocaleString()}万円 はそのまま` : ''}
+
+担当していた社員は、今期ほかの仕事に回せます。`)) return;
+            sfx.tap();
+            set(d => {
+              const a = { ...(d.assign as Record<string, string>) };
+              Object.keys(a).forEach(id => { if (a[id] === p.id) a[id] = ''; });
+              return { ...d, assign: a, rush: d.rush.filter(x => x !== p.id), drop: [...(d.drop || []), p.id] };
+            });
+          }}
           onOpen={() => setSheet(p.id)} onFill={() => autofill(p)} onRemove={eid => setAssign(eid, '')}
           onRush={() => { sfx.tap(); set(d => ({ ...d, rush: d.rush.includes(p.id) ? d.rush.filter(x => x !== p.id) : [...d.rush, p.id] })); }} />
       ))}
@@ -131,9 +154,9 @@ function Gauges({ reqs, sums }: { reqs: Partial<Record<Skill, number>>; sums: Pa
   );
 }
 
-function ProjectDevCard({ g, me, p, assign, rush, locked, onOpen, onFill, onRemove, onRush }: {
+function ProjectDevCard({ g, me, p, assign, rush, locked, onOpen, onFill, onRemove, onRush, onDrop }: {
   g: Game; me: Company; p: ActiveProject; assign: Record<string, string>; rush: boolean; locked: boolean;
-  onOpen: () => void; onFill: () => void; onRemove: (eid: string) => void; onRush: () => void;
+  onOpen: () => void; onFill: () => void; onRemove: (eid: string) => void; onRush: () => void; onDrop: () => void;
 }) {
   const spec = PROJECT_TYPES[p.type];
   const chk = projectCheck(g, me, p, assign);
@@ -181,6 +204,7 @@ function ProjectDevCard({ g, me, p, assign, rush, locked, onOpen, onFill, onRemo
         <span className="check" />
         <span className="grow">🏃 突貫工事<div className="note" style={{ fontWeight: 500 }}>進捗+2になるかわりに負債+2（スキルを満たしたときだけ）</div></span>
       </button>
+      {!locked && <button className="link-btn" onClick={onDrop}>🗑️ この案件を途中放棄する（違約金 {abandonFee(p).toLocaleString()}・評判{ABANDON.rep}）</button>}
     </div>
   );
 }
@@ -349,12 +373,15 @@ function AssignSheet({ g, me, target, assign, locked, onToggle, onClose }: {
 
 export function devSummary(g: Game, me: Company, d: DevSubmit) {
   const a = d.assign as Record<string, string>;
-  const stuck = me.projects.filter(p => !projectCheck(g, me, p, a).ok).length;
+  const drop = d.drop || [];
+  const live = me.projects.filter(p => !drop.includes(p.id));
+  const stuck = live.filter(p => !projectCheck(g, me, p, a).ok).length;
   const idle = me.engineers.filter(e => working(g, e) && !(a[e.id] ?? '')).length;
   const fired = Object.values(a).filter(x => x === 'fire').length;
   const parts: { t: string; w?: boolean }[] = [];
   if (stuck) parts.push({ t: `⚠ 進まない案件 ${stuck}件`, w: true });
-  else if (me.projects.length) parts.push({ t: `✓ 案件 ${me.projects.length}件すべて進行` });
+  else if (live.length) parts.push({ t: `✓ 案件 ${live.length}件すべて進行` });
+  if (drop.length) parts.push({ t: `放棄 ${drop.length}件`, w: true });
   if (idle) parts.push({ t: `待機 ${idle}人` });
   if (d.rush.length) parts.push({ t: `突貫 ${d.rush.length}件`, w: true });
   if (fired) parts.push({ t: `解雇 ${fired}人`, w: true });

@@ -3,7 +3,7 @@
 //  すべての乱数は g.seed から作るので、同じ入力なら同じ結果になる
 // =====================================================================
 import {
-  ACCUSE, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
+  ABANDON, ACCUSE, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
   EMPLOYEE_EVENT, ENGINEER, FIRE_DEBT, FIRST_NAMES, GAME, HACKATHON, HAPPENINGS, HAPPENING_FX, HIRE_FEES, INCIDENT,
   INTERIM, INTEREST, INVESTIGATE_COST, LAST_NAMES, LATE_PENALTY, MUST_SHARE, PROJECT_TYPES, REMOTE_SALARY, RENTAL, REPEAT_BONUS,
   REP_DISCOUNT, RUSH_DEBT, SECRET_MULTS, SERVICE, SEVERANCE_QUARTERS, SKILLS, SKILL_NAME, SPY_STEAL,
@@ -277,7 +277,9 @@ function cleanDev(g: Game, cid: string, s: DevSubmit): DevSubmit {
     if (v === undefined) continue;
     if (v === '' || (v === 'svc' && willHaveSvc) || (v === 'fire' && !e.loan) || c.projects.some(p => p.id === v)) out.assign[e.id] = v;
   }
-  out.rush = (s.rush || []).filter(id => c.projects.some(p => p.id === id));
+  out.drop = [...new Set((s.drop || []).filter(id => c.projects.some(p => p.id === id)))];
+  for (const e of c.engineers) if (out.drop.includes(out.assign[e.id])) out.assign[e.id] = '';
+  out.rush = (s.rush || []).filter(id => c.projects.some(p => p.id === id) && !out.drop!.includes(id));
   out.launch = !c.service && !!s.launch;
   const own = (id?: string) => c.engineers.find(e => e.id === id);
   if (s.offer && own(s.offer.engineerId) && !own(s.offer.engineerId)!.loan
@@ -573,6 +575,9 @@ export function resolveBid(g: Game) {
 // ---------------------------------------------------------------------
 interface Ledger { lines: RevealLine[]; jackpot: boolean }
 
+/** 途中放棄の違約金 */
+export const abandonFee = (p: ActiveProject) => round10(p.price * ABANDON.penalty);
+
 export function resolveDev(g: Game) {
   const q = g.q;
   const h = currentHappening(g);
@@ -625,6 +630,19 @@ export function resolveDev(g: Game) {
       if (c.sleeper?.engineerId === e.id) c.sleeper = null;
       c.stats.fired++;
       L(c, `${e.name} を解雇（退職金 −${sev}）`, 'bad');
+    }
+    // 6.5 案件の放棄（違約金・評判−1。受け取り済みの中間金は返さない）
+    for (const id of s.drop || []) {
+      const p = c.projects.find(x => x.id === id);
+      if (!p) continue;
+      const fee = abandonFee(p);
+      c.cash -= fee;
+      c.rep += ABANDON.rep;
+      c.projects = c.projects.filter(x => x !== p);
+      c.engineers.forEach(e => { if (e.assign === p.id) e.assign = null; });
+      L(c, `「${p.name}」を途中放棄（違約金 −${fee}・評判${ABANDON.rep}）`, 'bad');
+      headlines.push(`${c.name}、「${p.name}」から撤退`);
+      log(g, `${c.name}：「${p.name}」を放棄`);
     }
     // 7. サービス立ち上げ
     if (s.launch && !c.service) {

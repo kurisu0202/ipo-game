@@ -1,6 +1,6 @@
 // ===== 入札タブ =====
 import { useState } from 'react';
-import { BID_PCTS, CARDS, DESIGN_BONUS, INTERIM, DUMP_RATE, ENGINEER, FIRE_DEBT, GAME, HIRE_FEES, LATE_PENALTY, PROJECT_TYPES, REPEAT_BONUS, REP_DISCOUNT, SECRET_MULTS, SKILLS, SKILL_NAME, STOCK_CHANCE, TAGS } from '../logic/config';
+import { ABANDON, BID_PCTS, CARDS, DESIGN_BONUS, INTERIM, DUMP_RATE, ENGINEER, FIRE_DEBT, GAME, HIRE_FEES, LATE_PENALTY, PROJECT_TYPES, REPEAT_BONUS, REP_DISCOUNT, SECRET_MULTS, SKILLS, SKILL_NAME, STOCK_CHANCE, TAGS } from '../logic/config';
 import { checkReqs, quarterLabel, round10, skillSum, sumSkills } from '../logic/calc';
 import { bidAmount, pendingSpies } from '../logic/game';
 import type { BidPct, BidSubmit, CardKey, Company, Game, HireFee, Project, Skills } from '../logic/types';
@@ -234,6 +234,7 @@ function ProjectDetail({ g, me, p, pct, dumping, onClose }: { g: Game; me: Compa
         <b>🏁 落札のしくみ</b>
         <p style={{ margin: '6px 0 0' }}>一番安い会社が落札し、<b>入札した額がそのまま受注額</b>になります（100%なら予算満額）。
           比べるときだけ評判で割り引かれます：あなたは評判{me.rep}なので、入札額×{(1 - REP_DISCOUNT * me.rep).toFixed(2)} で比べられます。</p>
+        <p className="note" style={{ margin: '6px 0 0' }}>取ったあとで手に負えなくなったら、開発フェーズで途中放棄もできます（違約金＝受注額の{ABANDON.penalty * 100}%・評判{ABANDON.rep}）。</p>
       </div>
       {notes.length > 0 && <div className="card"><b>📌 この案件の特徴</b><ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{notes.map(n => <li key={n}>{n}</li>)}</ul></div>}
     </Sheet>
