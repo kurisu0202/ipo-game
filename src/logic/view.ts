@@ -16,7 +16,7 @@ export function viewFor(g: Game, me: string): View & { handCounts: Record<string
   for (const c of v.companies) {
     handCounts[c.id] = c.hand.length;
     const mine = c.id === me;
-    if (!mine) { c.hand = []; c.sleeper = null; c.secretNotes = []; c.spyOrdersLeft = 0; delete c.choices; }
+    if (!mine) { c.hand = []; c.sleeper = null; c.secretNotes = []; c.spyOrdersLeft = 0; delete c.choices; delete c.invest; }
     for (const e of c.engineers) {
       if (e.spy && e.spy.for !== me) delete e.spy;
       if (!mine) delete e.checked;

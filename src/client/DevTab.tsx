@@ -1,7 +1,7 @@
 // ===== 開発タブ =====
 import { useState } from 'react';
-import { ABANDON, GROWTH, INVESTIGATE_COST, TRAINING, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS, xpNeed } from '../logic/config';
-import { assignees, effSkills, launchCost, projectCheck, quarterLabel, rushDebt, serviceIncome, servicePower, skillSum, sumSkills, totalQ, working } from '../logic/calc';
+import { ABANDON, FUNDS, GROWTH, INVEST, INVESTIGATE_COST, TRAINING, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS, xpNeed } from '../logic/config';
+import { assignees, effSkills, launchCost, projectCheck, quarterLabel, rushDebt, season, serviceIncome, servicePower, skillSum, sumSkills, totalQ, working } from '../logic/calc';
 import { abandonFee, canTrain, pendingSpies } from '../logic/game';
 import type { ActiveProject, Company, DevSubmit, Engineer, Game, Skill, SpyOrder } from '../logic/types';
 import type { PlayerView } from '../logic/view';
@@ -89,6 +89,9 @@ export function DevTab({ v, me, draft, set, locked }: P) {
         onTrain={(eid, k) => { sfx.tap(); set(d => ({ ...d, assign: { ...d.assign, [eid]: 'train' }, train: { ...(d.train || {}), [eid]: k } })); }}
         onCancel={eid => { sfx.tap(); set(d => { const t = { ...(d.train || {}) }; delete t[eid]; return { ...d, assign: { ...d.assign, [eid]: '' }, train: t }; }); }} />
 
+      <InvestCard g={g} me={me} draft={draft} locked={locked}
+        onSet={(fid, v) => { sfx.coin(); set(d => { const inv = { ...(d.invest || {}) }; if (v) inv[fid] = v; else delete inv[fid]; return { ...d, invest: inv }; }); }} />
+
       <BackOps g={g} me={me} draft={draft} set={set} locked={locked} />
 
       <details className="fold">
@@ -125,6 +128,44 @@ export function placeName(me: Company, a: string) {
   if (a === 'svc') return 'サービス担当';
   if (!a) return '待機';
   return `「${me.projects.find(p => p.id === a)?.name || '案件'}」担当`;
+}
+
+/** 投資：今年の候補にお金を入れる。結果は冬の決算で */
+function InvestCard({ g, me, draft, locked, onSet }: { g: Game; me: Company; draft: DevSubmit; locked: boolean; onSet: (fid: string, v: number) => void }) {
+  const funds = g.funds || [];
+  if (!funds.length) return null;
+  const plan = draft.invest || {};
+  const planned = Object.values(plan).reduce((t, v) => t + v, 0);
+  const left = Math.max(0, me.cash) - planned;
+  const held = (fid: string) => (me.invest || []).filter(h => h.fund === fid).reduce((t, h) => t + h.amount, 0);
+  const heldAll = (me.invest || []).reduce((t, h) => t + h.amount, 0);
+  const toWinter = 3 - season(g.q);
+  const range = (k: keyof typeof FUNDS) => { const m = FUNDS[k].outcomes.map(o => o[0]); return `×${Math.min(...m)}〜×${Math.max(...m)}`; };
+  return (
+    <>
+      <div className="sec-title">💹 投資 <small>{toWinter === 0 ? '今期の決算で結果発表！' : `結果は冬の決算で発表（あと${toWinter}期）`}</small></div>
+      <div className="card">
+        <div className="note" style={{ marginBottom: 8 }}>今年の投資先です。同じ投資先に入れた会社は同じ倍率になります。運しだい！{heldAll > 0 && <b>（今年の投資 計{heldAll.toLocaleString()}万円）</b>}</div>
+        {funds.map(f => {
+          const s = FUNDS[f.kind];
+          const v = plan[f.id] || 0;
+          return (
+            <div className="fund" key={f.id}>
+              <div className="row"><span style={{ fontSize: 24 }}>{s.icon}</span>
+                <div className="grow" style={{ minWidth: 0 }}><b>{f.name}</b><div className="note">{s.label}・{s.desc}</div></div>
+                <div style={{ textAlign: 'right' }}><div className="risk" aria-label={`リスク${s.risk}`}>{'★'.repeat(s.risk)}<span>{'★'.repeat(5 - s.risk)}</span></div><div className="note">{range(f.kind)}</div></div></div>
+              {held(f.id) > 0 && <div className="note gold" style={{ marginTop: 4 }}>保有中 {held(f.id).toLocaleString()}万円</div>}
+              <div className="seg" style={{ marginTop: 6 }}>
+                <button className={!v ? 'on' : 'off'} disabled={locked} onClick={() => onSet(f.id, 0)}>なし</button>
+                {INVEST.amounts.map(a => <button key={a} className={v === a ? 'on gold' : ''} disabled={locked || (v !== a && a > left + v)} onClick={() => onSet(f.id, a)}>{a}</button>)}
+              </div>
+            </div>
+          );
+        })}
+        <div className="note" style={{ marginTop: 8 }}>{planned ? <>今期の投資 <b>{planned.toLocaleString()}万円</b>（決定すると現金から引かれます）・</> : null}投資に使えるのは手元の現金（{Math.max(0, me.cash).toLocaleString()}万円）まで</div>
+      </div>
+    </>
+  );
 }
 
 /** 研修：空いている社員を研修に行かせる（スキル+1・新スキル習得。来期は休み） */
@@ -501,6 +542,8 @@ export function devSummary(g: Game, me: Company, d: DevSubmit) {
   if (d.rush.length) parts.push({ t: `突貫 ${d.rush.length}件`, w: true });
   if (fired) parts.push({ t: `解雇 ${fired}人`, w: true });
   if (trained) parts.push({ t: `研修 ${trained}人` });
+  const inv = Object.values(d.invest || {}).reduce((t, v) => t + v, 0);
+  if (inv) parts.push({ t: `投資 ${inv.toLocaleString()}` });
   if (d.launch) parts.push({ t: 'サービス立ち上げ' });
   if (d.offer) parts.push({ t: 'レンタル出品' });
   if (d.accuse) parts.push({ t: '告発', w: true });

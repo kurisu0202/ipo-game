@@ -2,7 +2,7 @@
 //  3年で上場 ― 数値設定（バランス調整はこのファイルだけで行う）
 //  金額の単位はすべて「万円」、期間の単位は「期」（四半期）
 // =====================================================================
-import type { CardKey, IndustryKey, HappeningKey, ProjectType, Skill, SpyOrder, Tag } from './types';
+import type { CardKey, FundKind, IndustryKey, HappeningKey, ProjectType, Skill, SpyOrder, Tag } from './types';
 
 export const SKILLS: Skill[] = ['FE', 'BE', 'IN', 'DE', 'SE', 'AI'];
 export const SKILL_NAME: Record<Skill, string> = { FE: 'フロント', BE: 'バック', IN: 'インフラ', DE: 'デザイン', SE: 'セキュリティ', AI: 'AI' };
@@ -220,3 +220,21 @@ export const INDUSTRIES: Record<IndustryKey, IndustrySpec> = {
   },
 };
 
+
+// ---------- 投資（開発フェーズで投資、冬の決算で結果発表。運しだい） ----------
+export interface FundSpec { label: string; icon: string; risk: number; desc: string; outcomes: [number, number][]; names: string[] }   // outcomes: [倍率, 重み]
+export const INVEST = { amounts: [100, 300, 500, 1000] as const, perYear: 4 };
+export const FUNDS: Record<FundKind, FundSpec> = {
+  bond: { label: '国債', icon: '🏦', risk: 1, desc: 'ほぼ確実に少し増える', outcomes: [[1.03, 1], [1.05, 2], [1.08, 1]],
+    names: ['日本ほのぼの国債', '個人向け安心国債', '超長期まったり国債'] },
+  index: { label: '株式インデックス', icon: '📊', risk: 2, desc: '市場全体に連動。年によって上下', outcomes: [[0.8, 2], [1.0, 3], [1.2, 3], [1.4, 1]],
+    names: ['全世界まるっと株ファンド', 'ニッポン225連動ファンド', '米国ビッグ500ファンド'] },
+  estate: { label: '不動産', icon: '🏙️', risk: 2, desc: '堅めだが、たまに大きく下がる', outcomes: [[0.6, 1], [1.0, 3], [1.15, 4], [1.3, 1]],
+    names: ['湾岸タワーREIT', 'リゾート民泊ファンド', '駅前オフィスビル投資'] },
+  growth: { label: '成長株', icon: '🚀', risk: 3, desc: '当たれば大きいが、半分以下もある', outcomes: [[0.4, 3], [1.0, 2], [1.5, 3], [2.5, 1]],
+    names: ['ネコテック（ペット×IoT）', '宇宙エレベーター開発', '代替肉スタートアップ', '空飛ぶタクシー'] },
+  crypto: { label: '暗号資産', icon: '🪙', risk: 4, desc: 'ジェットコースター。紙くずか、大化けか', outcomes: [[0.1, 4], [0.5, 2], [1.5, 2], [3, 1], [6, 0.6]],
+    names: ['量子コイン', 'ワンワンコイン🐕', 'メタバース土地トークン', 'ラーメン本位制コイン'] },
+  angel: { label: '未公開株', icon: '🎲', risk: 5, desc: 'ほとんどは消える。ごくまれに10倍', outcomes: [[0, 6], [0.5, 2], [3, 2], [10, 0.6]],
+    names: ['社長の友人の新事業', 'ウワサの未上場ベンチャー', '謎の情報商材会社', '地下アイドル運営会社'] },
+};

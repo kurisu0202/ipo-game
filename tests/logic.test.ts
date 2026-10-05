@@ -346,3 +346,49 @@ describe('研修', () => {
     expect(Object.values(g.devSubs.a.assign).filter(v => v === 'train')).toHaveLength(0);
   });
 });
+
+describe('投資', () => {
+  const setup = () => {
+    const g = two(); cleanHands(g);
+    g.phase = 'dev';
+    co(g, 'a').cash = 1000;
+    return g;
+  };
+  it('春に国債を含む4つの投資先が出る', () => {
+    const g = setup();
+    expect(g.funds).toHaveLength(4);
+    expect(g.funds![0].kind).toBe('bond');
+  });
+  it('決まった金額だけ・手元の現金まで。投資すると現金が減り、他社には見えない', () => {
+    const g = setup();
+    const [f1, f2, f3] = g.funds!;
+    const s = defaultDev(g, 'a');
+    s.invest = { [f1.id]: 500, [f2.id]: 300, [f3.id]: 500, nope: 100 };   // 3つ目は残り200を超える
+    submit(g, 'a', s);
+    expect(g.devSubs.a.invest).toEqual({ [f1.id]: 500, [f2.id]: 300 });
+    const s2 = defaultDev(g, 'a'); s2.invest = { [f1.id]: 250 };
+    submit(g, 'a', s2);
+    expect(g.devSubs.a.invest).toBeUndefined();
+    submit(g, 'a', s);
+    submit(g, 'b', defaultDev(g, 'b'));
+    const before = co(g, 'a').cash;
+    resolveDev(g);
+    expect(co(g, 'a').invest).toEqual([{ fund: f1.id, amount: 500 }, { fund: f2.id, amount: 300 }]);
+    expect(before - co(g, 'a').cash).toBeGreaterThanOrEqual(800);
+    expect(viewFor(g, 'b').game.companies.find(c => c.id === 'a')!.invest).toBeUndefined();
+  });
+  it('冬の決算で倍率が決まり、投資額×倍率が戻る', () => {
+    const g = setup();
+    g.q = 3;
+    const f = g.funds![0];
+    co(g, 'a').invest = [{ fund: f.id, amount: 1000 }];
+    const cashBefore = co(g, 'a').cash;
+    devOnly(g);
+    expect(f.mult).toBeGreaterThanOrEqual(1.03);
+    const block = g.reveal!.blocks.find(b => b.title === '今年の投資の結果');
+    expect(block).toBeTruthy();
+    expect(co(g, 'a').invest).toEqual([]);
+    expect(block!.lines.some(l => l.text.includes(`投資1,000 → ${(Math.round(1000 * f.mult! / 10) * 10).toLocaleString()}`))).toBe(true);
+    expect(co(g, 'a').cash).not.toBe(cashBefore);
+  });
+});

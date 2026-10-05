@@ -6,6 +6,9 @@ export type Tag = 'rush' | 'rich' | 'repeat' | 'muri' | 'legacy' | 'record' | 'h
 export type CardKey = 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7' | 'A8' | 'A9' | 'S1' | 'D1' | 'D2' | 'D3' | 'D4' | 'D5' | 'D6' | 'D7' | 'D8' | 'D9';
 export type HappeningKey = 'H1' | 'H2' | 'H3' | 'H4' | 'H5' | 'H6' | 'H7' | 'H8' | 'H9' | 'H10' | 'H11' | 'H12' | 'H13' | 'H14' | 'H15' | 'H16' | 'H17' | 'H18';
 export type IndustryKey = 'sier' | 'web' | 'saas' | 'ai' | 'maint' | 'consul';
+export type FundKind = 'bond' | 'index' | 'growth' | 'estate' | 'crypto' | 'angel';
+export interface Fund { id: string; kind: FundKind; name: string; mult?: number }   // mult は冬に決まる
+export interface Holding { fund: string; amount: number }
 export type Skills = Partial<Record<Skill, number>>;
 
 export interface Engineer {
@@ -46,6 +49,7 @@ export interface Company {
   sleeper: { engineerId: string; order: SpyOrder } | null;
   spyOrdersLeft: number; honestLoans: number; honestAwarded: boolean;
   industry?: IndustryKey;          // 選んだ業種
+  invest?: Holding[];              // 今年の投資（冬の決算で結果が出る。本人だけに見える）
   choices?: IndustryKey[];         // 配られた業種の候補（本人だけに見える）
   secretNotes: string[];
   quarterStartCash: number;
@@ -74,6 +78,7 @@ export interface PickSubmit { industry: IndustryKey }
 export interface DevSubmit {
   assign: Record<string, string | 'svc' | '' | 'fire' | 'train'>;
   train?: Record<string, Skill>;   // 研修に行かせる社員 → 伸ばすスキル
+  invest?: Record<string, number>; // 投資先 → 金額
   rush: string[];
   drop?: string[];   // 放棄する案件
   launch: boolean;
@@ -97,6 +102,7 @@ export interface Game {
   bidSubs: Record<string, BidSubmit>;
   devSubs: Record<string, DevSubmit>;
   pickSubs?: Record<string, PickSubmit>;   // 業種選び
+  funds?: Fund[];                          // 今年の投資先の候補
   secretMult: Record<string, number>;   // 極秘案件の倍率（完了時に決まる）
   hackSkill?: string;
   reveal: Reveal | null;                // 直前の解決結果の発表

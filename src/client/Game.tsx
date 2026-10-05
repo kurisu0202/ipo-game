@@ -211,6 +211,7 @@ function MeTab({ v, me }: { v: PlayerView; me: Company }) {
       <div className="kpis" style={{ marginTop: 6 }}>
         <div className="kpi"><small>📈 株</small><span className="num">{me.stocks.length}<small>株</small></span><div className="note">価値は最終決算で決定（0〜2,000）</div></div>
         <div className="kpi"><small>🧠 AIノウハウ</small><span className="num">{me.aiKnowhow}</span></div>
+        <div className="kpi"><small>💹 今年の投資</small><span className="num">{(me.invest || []).reduce((t, h) => t + h.amount, 0).toLocaleString()}<small>万円</small></span><div className="note">結果は冬の決算で</div></div>
       </div>
       {detail && <CardDetail k={detail} onClose={() => setDetail(null)} />}
     </div>

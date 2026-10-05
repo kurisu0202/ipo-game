@@ -142,6 +142,7 @@ const REP = ['うちの評判、業界で話題ですよ', '「{co}さんなら�
 const FIRST = ['いよいよ創業ですね！', '{co}の歴史が今始まる', '最初の案件、絶対取りましょう'];
 const LAST = ['いよいよ最後の期ですね…', '上場まであと少し！🔔', '最後まで走り切りましょう', 'ここで逆転できるかも'];
 const TRAINED = ['研修、めちゃくちゃ勉強になりました📚', '研修で覚えたこと、早く使いたい！', '研修の資格試験、受かりました🎉', '研修先のお弁当がおいしかった', '頭がパンパンです…でも成長した気がする', '研修のおかげで視野が広がりました'];
+const INVESTING = ['社長、{fund}に入れたって本当ですか…？', '{fund}のチャート、毎朝見てます📈', '投資の結果、冬までドキドキですね', '{fund}、ニュースで話題になってました', '本業もがんばりましょうね…？', '株価アプリ、通知切れません'];
 const GROW = ['もうすぐ{skill}がレベルアップしそうです📈', '最近、手応えあります', '成長してる実感があります'];
 
 // ---------- 業種 ----------
@@ -172,6 +173,7 @@ const RULES: Rule[] = [
   R(3, x => !!x.e.via, WHISPER),
   R(30, x => !working(x.g, x.e), REST),
   R(25, x => x.e.trainedQ !== undefined && x.g.q - x.e.trainedQ <= 2, TRAINED),
+  R(5, x => !!x.me.invest?.length, INVESTING),
   R(4, x => !!x.top, x => SKILL_LINES[x.top!]),
   R(3, always, x => SEASON_LINES[season(x.g.q)]),
   R(4, always, x => HAP_LINES[x.g.happenings[x.g.q]] || []),
@@ -213,10 +215,11 @@ export function pickVoice(g: Game, me: Company, recent: string[]): { e: Engineer
     .replace(/\{proj\}/g, proj?.name || '案件')
     .replace(/\{rival\}/g, rivals.length ? rivals[Math.floor(Math.random() * rivals.length)].name : 'ライバル')
     .replace(/\{skill\}/g, top ? SKILL_NAME[top] : '仕事')
-    .replace(/\{boss\}/g, '社長');
+    .replace(/\{boss\}/g, '社長')
+    .replace(/\{fund\}/g, g.funds?.find(f => f.id === me.invest?.[0]?.fund)?.name || '投資先');
   return { e, text, key };
 }
 
 /** せりふの総数 */
-export const VOICE_COUNT = [GENERAL, BID, DEV, IDLE, ON_PROJ, SHORT, LATE, DUE, DONE_SOON, SVC, ROOKIE, LEGEND, RENTED, HH, WHISPER, REST, RICH, POOR, NEG, DEBT, REP, FIRST, LAST, GROW, TRAINED,
+export const VOICE_COUNT = [GENERAL, BID, DEV, IDLE, ON_PROJ, SHORT, LATE, DUE, DONE_SOON, SVC, ROOKIE, LEGEND, RENTED, HH, WHISPER, REST, RICH, POOR, NEG, DEBT, REP, FIRST, LAST, GROW, TRAINED, INVESTING,
   ...Object.values(SKILL_LINES), ...SEASON_LINES, ...Object.values(HAP_LINES), ...Object.values(INDUSTRY_LINES)].reduce((t, a) => t + (a?.length || 0), 0);

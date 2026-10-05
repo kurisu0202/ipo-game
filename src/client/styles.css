@@ -540,3 +540,6 @@ details.fold.secret > summary { color: var(--down); }
 @keyframes voice-out { to { opacity: 0; transform: translate(-50%, 6px); } }
 @media (prefers-reduced-motion: reduce) { .voice { animation: none; } }
 .icon-btn.off { opacity: .55; }
+.fund + .fund { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line2); }
+.fund .risk { color: var(--down); font-size: 12px; letter-spacing: -1px; }
+.fund .risk span { color: var(--line2); }

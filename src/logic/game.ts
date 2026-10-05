@@ -3,7 +3,7 @@
 //  すべての乱数は g.seed から作るので、同じ入力なら同じ結果になる
 // =====================================================================
 import {
-  ABANDON, ACCUSE, GROWTH, INDUSTRIES, TRAINING, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
+  ABANDON, ACCUSE, FUNDS, GROWTH, INDUSTRIES, INVEST, TRAINING, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
   EMPLOYEE_EVENT, ENGINEER, FIRE_DEBT, FIRST_NAMES, GAME, HACKATHON, HAPPENINGS, HAPPENING_FX, HIRE_FEES, INCIDENT,
   INTERIM, INTEREST, INVESTIGATE_COST, LAST_NAMES, LATE_PENALTY, MUST_SHARE, PROJECT_TYPES, REMOTE_SALARY, RENTAL, REPEAT_BONUS,
   REP_DISCOUNT, SECRET_MULTS, SERVICE, SEVERANCE_QUARTERS, SKILLS, SKILL_NAME, SPY_STEAL,
@@ -17,7 +17,7 @@ import {
 } from './calc';
 import { chance, int, pick, shuffle, weighted } from './rng';
 import type {
-  ActiveProject, BidPct, BidSubmit, IndustryKey, PickSubmit, CardKey, Company, DevSubmit, Engineer, FinalRow, Game, HappeningKey, HireFee,
+  ActiveProject, BidPct, BidSubmit, Fund, FundKind, IndustryKey, PickSubmit, CardKey, Company, DevSubmit, Engineer, FinalRow, Game, HappeningKey, HireFee,
   Project, ProjectType, RevealBlock, RevealLine, Skill, Skills, SpyOrder, Tag,
 } from './types';
 
@@ -210,6 +210,7 @@ export function startQuarter(g: Game) {
   const h = currentHappening(g);
   const hs = HAPPENINGS[h];
   g.companies.forEach(c => { c.hitsThisQuarter = 0; c.quarterStartCash = c.cash; });
+  if (season(g.q) === 0 || !g.funds) g.funds = newFunds(g);
   log(g, `━━ ${quarterLabel(g.q)}（第${g.q + 1}期）━━ ハプニング「${hs.name}」`);
 
   // 春：新人の成長
@@ -337,7 +338,20 @@ function cleanDev(g: Game, cid: string, s: DevSubmit): DevSubmit {
   if (s.investigate && own(s.investigate)?.via) out.investigate = s.investigate;
   if (s.accuse && own(s.accuse)?.via) out.accuse = s.accuse;
   out.spyOrders = cleanOrders(g, cid, s.spyOrders);
+  // 投資：今年の候補に、決まった金額だけ。合計は手元の現金まで
+  let left = Math.max(0, c.cash);
+  for (const [fid, v] of Object.entries(s.invest || {})) {
+    if (!(g.funds || []).some(f => f.id === fid) || !(INVEST.amounts as readonly number[]).includes(v) || v > left) continue;
+    (out.invest ??= {})[fid] = v;
+    left -= v;
+  }
   return out;
+}
+
+/** 今年の投資先：国債1つ＋ほかの種類からランダムに3つ */
+function newFunds(g: Game): Fund[] {
+  const others = shuffle(g, (Object.keys(FUNDS) as FundKind[]).filter(k => k !== 'bond')).slice(0, INVEST.perYear - 1);
+  return (['bond', ...others] as FundKind[]).map(kind => ({ id: uid(g, 'f'), kind, name: pick(g, FUNDS[kind].names) }));
 }
 
 export function submit(g: Game, cid: string, data: BidSubmit | DevSubmit | PickSubmit) {
@@ -750,6 +764,14 @@ export function resolveDev(g: Game) {
     }
     c.projects.forEach(p => { p.rush = s.rush.includes(p.id); });
     doTraining(g, c, s, L);
+    // 投資（お金は今出ていき、結果は冬の決算で）
+    for (const [fid, v] of Object.entries(s.invest || {})) {
+      const f = (g.funds || []).find(x => x.id === fid);
+      if (!f) continue;
+      c.cash -= v;
+      (c.invest ??= []).push({ fund: fid, amount: v });
+      L(c, `💹 ${f.name}に投資 −${v}（結果は冬の決算で）`, 'muted');
+    }
 
     // 9. 作業停止
     const stopped = h === 'H15' || (h === 'H1' && !c.engineers.some(e => working(g, e) && (effSkills(g, c, e, true).IN || 0) > 0));
@@ -918,6 +940,32 @@ export function resolveDev(g: Game) {
       lines: [...g.companies.map(c => ({ text: `${c.name}：最高スキル ${score(c)}` })), { text: winners.length ? `優勝 ${winners.map(c => c.name).join('・')}：+${HACKATHON.prize}・評判+${HACKATHON.rep}` : '優勝なし', tone: 'gold' as const }],
       stamp: { type: 'trophy', text: winners.length ? `${winners.map(c => c.name).join('・')} 優勝` : '優勝なし', tone: 'gold' },
     });
+  }
+  if (season(q) === 3 && (g.funds || []).length) {
+    const lines: RevealLine[] = [];
+    for (const f of g.funds!) {
+      f.mult = weighted(g, FUNDS[f.kind].outcomes, o => o[1])[0];
+      lines.push({ text: `${FUNDS[f.kind].icon} ${f.name}（${FUNDS[f.kind].label}）… ×${f.mult}`, tone: f.mult >= 1.5 ? 'gold' : f.mult >= 1 ? 'good' : 'bad' });
+    }
+    let best = { c: '', gain: 0 };
+    g.companies.forEach(c => {
+      if (!c.invest?.length) return;
+      let total = 0, paid = 0;
+      for (const h of c.invest) {
+        const f = g.funds!.find(x => x.id === h.fund);
+        const back = round10(h.amount * (f?.mult ?? 1));
+        total += back; paid += h.amount;
+      }
+      c.cash += total;
+      c.yearProfit += total;
+      const gain = total - paid;
+      if (gain > best.gain) best = { c: c.name, gain };
+      lines.push({ text: `${c.name}：投資${paid.toLocaleString()} → ${total.toLocaleString()}（${signedYen(gain)}）`, tone: gain >= 0 ? 'good' : 'bad' });
+      c.invest = [];
+    });
+    if (best.c && best.gain >= 1000) headlines.push(`${best.c}、投資で${yen(best.gain)}の大もうけ`);
+    const jackpot = g.funds!.some(f => (f.mult ?? 1) >= 3);
+    blocks.push({ kind: 'season', icon: '💹', title: '今年の投資の結果', lines, stamp: jackpot ? { type: 'money', text: '大化け！', tone: 'gold' } : { type: 'info', text: '投資の結果', tone: 'blue' } });
   }
   if (season(q) === 3) {
     const lines: RevealLine[] = [];
