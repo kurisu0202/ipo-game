@@ -532,3 +532,11 @@ details.fold.secret > summary { color: var(--down); }
 .ind-card .ind-icon { font-size: 34px; line-height: 1; }
 .ind-card .ind-name { font-size: 17px; font-weight: 900; }
 .ind-list { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; font-weight: 700; }
+/* 社員のひとこと */
+.voice { padding-right: 58px; box-sizing: border-box; position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(86px + var(--safe-b)); width: calc(100% - 32px); max-width: 448px; z-index: 25; display: flex; align-items: flex-end; gap: 8px; pointer-events: auto; animation: voice-in .35s cubic-bezier(.2, 1.4, .4, 1) both, voice-out .4s ease-in 5.1s forwards; }
+.voice .vb { position: relative; background: var(--card); color: var(--ink); border: 1px solid var(--line2); border-radius: 16px 16px 16px 4px; padding: 8px 12px; font-size: 14px; font-weight: 700; box-shadow: var(--shadow); max-width: 82%; line-height: 1.45; }
+.voice .vb small { display: block; font-size: 10px; color: var(--faint); font-weight: 700; margin-bottom: 1px; }
+@keyframes voice-in { from { opacity: 0; transform: translate(-50%, 14px) scale(.9); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+@keyframes voice-out { to { opacity: 0; transform: translate(-50%, 6px); } }
+@media (prefers-reduced-motion: reduce) { .voice { animation: none; } }
+.icon-btn.off { opacity: .55; }

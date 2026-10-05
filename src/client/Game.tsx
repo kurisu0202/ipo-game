@@ -8,6 +8,7 @@ import type { PlayerView } from '../logic/view';
 import { phaseKey, type ChatMsg } from '../shared/protocol';
 import { BidTab, CardDetail, CardTile } from './BidTab';
 import { IndustryChip, IndustryDetail } from './Industry';
+import { VoiceBubble, setVoice, voiceOn } from './Voice';
 import { DevTab, EngBadges, ProjectSkillSheet, XpLine, devSummary } from './DevTab';
 import { sfx, setSound, soundOn } from './fx/sound';
 import type { Snapshot } from './session';
@@ -34,6 +35,7 @@ export function GameScreen({ snap, onSubmit, onCancel, onExit, onAgain, onChat, 
   const [tab, setTab] = useState<Tab>('main');
   const [happen, setHappen] = useState(false);
   const [sound, setSnd] = useState(soundOn);
+  const [voice, setVoiceState] = useState(voiceOn);
 
   // 提出前の下書き（リロードしても残す）
   const initial = (): BidSubmit | DevSubmit => {
@@ -59,6 +61,7 @@ export function GameScreen({ snap, onSubmit, onCancel, onExit, onAgain, onChat, 
         <div className="hdr-top">
           <button className="icon-btn" aria-label="終了" onClick={() => { if (confirm(snap.mode === 'local' ? 'ホームに戻りますか？（続きから再開できます）' : 'ゲームから抜けますか？（同じルームIDと会社名で戻れます）')) onExit(); }}>✕</button>
           <button className="icon-btn" aria-label="効果音" onClick={() => { setSound(!sound); setSnd(!sound); }}>{sound ? '🔊' : '🔇'}</button>
+          <button className={`icon-btn ${voice ? '' : 'off'}`} aria-label={voice ? '社員のひとことをオフ' : '社員のひとことをオン'} title="社員のひとこと" onClick={() => { setVoice(!voice); setVoiceState(!voice); }}>{voice ? '💬' : '🤐'}</button>
           <div className="hdr-mid">
             <div className="q">{quarterLabel(g.q)}<span className="faint" style={{ fontSize: 11, marginLeft: 6 }}>第{g.q + 1}期/{totalQ(g)}</span></div>
             <span className={`ph ${g.phase}`}>{g.phase === 'bid' ? '入札フェーズ' : '開発フェーズ'}</span>
@@ -109,6 +112,7 @@ export function GameScreen({ snap, onSubmit, onCancel, onExit, onAgain, onChat, 
       </div>
 
       {snap.mode === 'online' && <Chat chat={snap.chat} me={snap.me} onSend={onChat} />}
+      <VoiceBubble g={g} me={me} on={voice} />
       {happen && (
         <Sheet onClose={() => setHappen(false)} title={<>{h.icon} {h.name}</>} sub={`今期のハプニング（${h.when === 'start' ? '期の始めに発生' : '開発の解決時に発生'}）`}>
           <div className="card"><p style={{ margin: 0 }}>{h.desc}</p></div>
