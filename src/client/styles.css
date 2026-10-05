@@ -508,3 +508,13 @@ details.fold.secret > summary { color: var(--down); }
   .rblock, .rline, .stamp { animation: fadein .3s both !important; opacity: 0; }
 }
 .splash .t { position: relative; display: inline-block; }
+
+/* 案件の詳細：入札率ごとの表 */
+.ptable { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ptable th { font-size: 11px; color: var(--sub); font-weight: 700; text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.ptable td { text-align: right; padding: 6px; border-bottom: 1px solid var(--line); }
+.ptable th:first-child, .ptable td:first-child { text-align: left; }
+.ptable td.up { color: var(--up); font-weight: 700; }
+.ptable td.down { color: var(--down); font-weight: 700; }
+.ptable tr.on td { background: var(--gold-bg); font-weight: 700; }
+.card.lp { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }

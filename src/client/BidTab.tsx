@@ -1,7 +1,7 @@
 // ===== 入札タブ =====
 import { useState } from 'react';
-import { BID_PCTS, CARDS, DUMP_RATE, HIRE_FEES, PROJECT_TYPES, SKILLS, SKILL_NAME, TAGS } from '../logic/config';
-import { checkReqs, sumSkills } from '../logic/calc';
+import { BID_PCTS, CARDS, DESIGN_BONUS, DUMP_RATE, ENGINEER, FIRE_DEBT, GAME, HIRE_FEES, LATE_PENALTY, PROJECT_TYPES, REPEAT_BONUS, REP_DISCOUNT, SECRET_MULTS, SKILLS, SKILL_NAME, STOCK_CHANCE, TAGS } from '../logic/config';
+import { checkReqs, quarterLabel, round10, skillSum, sumSkills } from '../logic/calc';
 import { bidAmount, pendingSpies } from '../logic/game';
 import type { BidPct, BidSubmit, CardKey, Company, Game, HireFee, Project, Skills } from '../logic/types';
 import type { PlayerView } from '../logic/view';
@@ -22,7 +22,7 @@ export function BidTab({ v, me, draft, set, locked }: P) {
       <SecretFile v={v} me={me} orders={draft.spyOrders} locked={locked} open={pend.length > 0}
         setOrder={(eid, o) => set(d => ({ ...d, spyOrders: { ...d.spyOrders, [eid]: o } }))} />
 
-      <div className="sec-title">📋 今期の案件 <span className="n">{g.market.length}</span><small>入札は予算に対する%。一番安い会社が落札</small></div>
+      <div className="sec-title">📋 今期の案件 <span className="n">{g.market.length}</span><small>入札は予算に対する%。一番安い会社が落札・長押しで利益の目安</small></div>
       {g.market.map(p => (
         <ProjectBidCard key={p.id} g={g} me={me} p={p} pct={draft.bids[p.id]} dumping={dumping} locked={locked}
           onPick={pct => { sfx.tap(); set(d => { const bids = { ...d.bids }; if (pct) bids[p.id] = pct; else delete bids[p.id]; return { ...d, bids }; }); }} />
@@ -125,8 +125,11 @@ function ProjectBidCard({ g, me, p, pct, dumping, locked, onPick }: { g: Game; m
   const secret = p.type === 'secret';
   const warn = capacityWarn(g, me, p.reqs);
   const banned = me.effects.noBid === g.q;
+  const [info, setInfo] = useState(false);
+  const lp = useLongPress(() => setInfo(true));
   return (
-    <div className={`card ${secret ? 'secret-card' : ''} ${pct ? 'selected' : ''}`}>
+    <>
+    <div className={`card lp ${secret ? 'secret-card' : ''} ${pct ? 'selected' : ''}`} {...lp}>
       <div className="proj-top">
         <span className={`ptype ${p.type}`}>{spec.icon} {spec.name}</span>
         {p.tags.map(t => <span key={t} className={`tag ${t === 'muri' || t === 'haggle' || t === 'legacy' ? 'bad' : ''}`}>{TAGS[t].name}：{TAGS[t].desc}</span>)}
@@ -137,6 +140,7 @@ function ProjectBidCard({ g, me, p, pct, dumping, locked, onPick }: { g: Game; m
       <div className="money-row">
         {secret ? <span className="num" style={{ fontSize: 20 }}>予算 ？？？</span> : <span className="num">{p.budget.toLocaleString()}<small>万円</small></span>}
         <span className="chip">{p.pay === 'turn' ? '毎期払い' : '完了時に一括'}</span>
+        <button className="chip blue" style={{ marginLeft: 'auto' }} onClick={() => setInfo(true)}>💰 利益の目安</button>
       </div>
       <SkillChips skills={p.reqs} />
       {warn && <div className="warn" style={{ marginTop: 8 }}>⚠ {warn}</div>}
@@ -153,6 +157,86 @@ function ProjectBidCard({ g, me, p, pct, dumping, locked, onPick }: { g: Game; m
         </div>
       </div>
     </div>
+    {info && <ProjectDetail g={g} me={me} p={p} pct={pct} dumping={dumping} onClose={() => setInfo(false)} />}
+    </>
+  );
+}
+
+/** 必要スキルぴったりの社員で担当したときの、1期あたりの給料の目安（1人あたりスキル4前後と仮定） */
+function salaryEstimate(reqs: Skills) {
+  const sk = skillSum(reqs);
+  const people = Math.max(1, Math.ceil(sk / 4));
+  return { sk, people, perQ: round10(ENGINEER.salaryBase * people + ENGINEER.salaryPerSkill * sk) };
+}
+
+function ProjectDetail({ g, me, p, pct, dumping, onClose }: { g: Game; me: Company; p: Project; pct?: BidPct; dumping: boolean; onClose: () => void }) {
+  const spec = PROJECT_TYPES[p.type];
+  const secret = p.type === 'secret';
+  const haggle = p.tags.includes('haggle');
+  const last = GAME.quarters - 1;
+  const doneQ = g.q + p.duration - 1;            // 最短で完了する期（落札した期の開発フェーズから着手）
+  const tooLate = doneQ > last;
+  const sal = salaryEstimate(p.reqs);
+  const cost = sal.perQ * p.duration;
+  const rows = BID_PCTS.map(x => {
+    const price = secret ? 0 : bidAmount(p.budget, x, dumping);
+    const got = round10(price * (haggle ? TAGS.haggle.mult! : 1)) + (p.tags.includes('repeat') ? REPEAT_BONUS : 0);
+    return { x, price, got, profit: got - cost };
+  });
+  const diff = haggle || p.tags.includes('repeat');   // 受注額と受け取りが違うときだけ列を出す
+  const when = p.pay === 'turn'
+    ? `進んだ期ごとに、その期の決算で 受注額÷${p.duration} ずつ（最短 ${quarterLabel(g.q)}〜${quarterLabel(Math.min(doneQ, last))}）`
+    : `完了した期の決算で一括（最短 ${quarterLabel(Math.min(doneQ, last))}）`;
+  const notes: string[] = [];
+  if (haggle) notes.push(`値切り屋：受け取りは受注額の×${TAGS.haggle.mult}`);
+  if (p.tags.includes('repeat')) notes.push(`リピートあり：完了時に+${REPEAT_BONUS}（表に含めています）`);
+  if (p.tags.includes('record')) notes.push('実績になる：完了で評判+1（次からの入札が有利に）');
+  if (p.tags.includes('muri')) notes.push('無茶な要件：進むたびに負債+1');
+  if (p.tags.includes('legacy')) notes.push('レガシー環境：インフラ+1が必要（必要スキルに含めています）');
+  if (p.type === 'fire') notes.push(`炎上火消し：落札した時点で負債+${FIRE_DEBT}`);
+  if (p.type === 'overseas') notes.push('海外案件：ハプニング「為替の急変動」が来ると報酬が×2か×0.5に');
+  if (p.type === 'design') notes.push(`デザイン重視：デザインを必要量+${DESIGN_BONUS.extra}以上そろえると報酬×${DESIGN_BONUS.mult}`);
+  if (p.type === 'startup') notes.push(`スタートアップ：完了すると${STOCK_CHANCE * 100}%で株（最終決算で価値が決まる）`);
+  if (p.type === 'ai') notes.push('AI案件：完了でAIノウハウ+1');
+  if (secret) notes.push(`極秘案件：予算は非公開。完了時に×${SECRET_MULTS[0]}〜×${SECRET_MULTS[SECRET_MULTS.length - 1]}のどれかになる`);
+  return (
+    <Sheet onClose={onClose} title={<>{spec.icon} {p.name}</>} sub={`${spec.name}・${p.duration}期・${p.pay === 'turn' ? '毎期払い' : '完了時に一括'}`}>
+      <div className="card">
+        <b>💰 お金が入るのは</b>
+        <p style={{ margin: '6px 0 0' }}>{when}</p>
+        {tooLate
+          ? <div className="warn" style={{ marginTop: 8 }}>⚠ 普通に進めると{GAME.quarters}期目（{quarterLabel(last)}）までに終わりません。突貫（1期で2進む・負債+2）が必要です。終わらなかった分は受け取れません</div>
+          : <p className="note" style={{ margin: '6px 0 0' }}>必要スキルを満たす社員を割り当てると1期に1進みます。足りない期は進まず、締切（{quarterLabel(doneQ)}）より遅れると1期ごとに報酬−{LATE_PENALTY * 100}%</p>}
+      </div>
+      <div className="card">
+        <b>🧮 入札率ごとの目安</b>
+        {secret
+          ? <p className="note" style={{ margin: '6px 0 0' }}>予算が非公開のため金額は出せません。受け取りは「予算×入札率×極秘倍率」です</p>
+          : (
+            <table className="ptable">
+              <thead><tr><th>入札</th><th>受注額</th>{diff && <th>受け取り</th>}<th>利益の目安</th></tr></thead>
+              <tbody>
+                {rows.map(r => (
+                  <tr key={r.x} className={pct === r.x ? 'on' : ''}>
+                    <td>{r.x}%</td><td>{r.price.toLocaleString()}</td>{diff && <td>{r.got.toLocaleString()}</td>}
+                    <td className={r.profit >= 0 ? 'up' : 'down'}>{r.profit >= 0 ? '+' : '−'}{Math.abs(r.profit).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        <p className="note" style={{ margin: '8px 0 0' }}>
+          利益の目安 ＝ {diff ? '受け取り' : '受注額'} − 担当社員の給料 約{cost.toLocaleString()}万円（必要スキル{sal.sk}を約{sal.people}人で担当、{sal.perQ}万円/期×{p.duration}期として計算）。
+          社員は案件がなくても給料がかかるので、空いている社員に担当させるなら{diff ? '受け取り' : '受注額'}がほぼそのまま利益になります。{dumping ? `ダンピング（×${DUMP_RATE}）込みです。` : ''}
+        </p>
+      </div>
+      <div className="card">
+        <b>🏁 落札のしくみ</b>
+        <p style={{ margin: '6px 0 0' }}>一番安い会社が落札し、<b>入札した額がそのまま受注額</b>になります（100%なら予算満額）。
+          比べるときだけ評判で割り引かれます：あなたは評判{me.rep}なので、入札額×{(1 - REP_DISCOUNT * me.rep).toFixed(2)} で比べられます。</p>
+      </div>
+      {notes.length > 0 && <div className="card"><b>📌 この案件の特徴</b><ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{notes.map(n => <li key={n}>{n}</li>)}</ul></div>}
+    </Sheet>
   );
 }
 
