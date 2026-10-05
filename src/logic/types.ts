@@ -80,6 +80,7 @@ export interface DevSubmit {
 
 export interface Game {
   id: string; q: number; phase: 'bid' | 'dev' | 'end';
+  quarters?: number;   // 全体の期数（12=3年モード、8=2年モード）。古いデータでは無い
   seed: number;
   happenings: HappeningKey[];
   market: Project[]; pool: Engineer[];

@@ -1,6 +1,10 @@
 // ===== 計算ヘルパー（解決処理と画面の両方で使う） =====
-import { SERVICE, SKILLS } from './config';
+import { GAME, SERVICE, SKILLS } from './config';
 import type { ActiveProject, Company, Engineer, Game, Skill, Skills } from './types';
+
+/** このゲームの全期数と年数 */
+export const totalQ = (g: { quarters?: number }) => g.quarters || GAME.quarters;
+export const totalYears = (g: { quarters?: number }) => Math.round(totalQ(g) / 4);
 
 export const round10 = (v: number) => Math.round(v / 10) * 10;
 export const skillSum = (s: Skills) => SKILLS.reduce((t, k) => t + (s[k] || 0), 0);

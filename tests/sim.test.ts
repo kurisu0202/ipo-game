@@ -52,3 +52,29 @@ describe('自動対戦', () => {
     expect(profits.length).toBe(1200);
   });
 });
+
+describe('2年モード', () => {
+  it('8期で最終決算になり、ボットの利益分布を出す', () => {
+    const profits: number[] = [];
+    for (let i = 0; i < 200; i++) {
+      const players = Array.from({ length: 4 }, (_, k) => ({ id: `c${k}`, name: `会社${k}` }));
+      const g = createGame(players, 7000 + i, 'two', 8);
+      const r = rng(i + 3);
+      expect(g.happenings).toHaveLength(8);
+      for (let step = 0; step < 100 && g.phase !== 'end'; step++) {
+        g.companies.forEach(c => submit(g, c.id, g.phase === 'bid' ? smartBid(g, c.id, r) : smartDev(g, c.id, r)));
+        expect(tryResolve(g)).toBe(true);
+        invariants(g);
+      }
+      expect(g.phase).toBe('end');
+      expect(g.q).toBe(7);
+      g.final!.forEach(f => profits.push(f.profit));
+    }
+    profits.sort((a, b) => a - b);
+    const q = (p: number) => profits[Math.floor((profits.length - 1) * p)];
+    console.log(`2年モードの利益：最小 ${q(0)} / 25% ${q(0.25)} / 中央値 ${q(0.5)} / 75% ${q(0.75)} / 最大 ${q(1)}`);
+  });
+  it('対応していない期数は標準（12期）になる', () => {
+    expect(createGame([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], 1, 'x', 5).quarters).toBe(12);
+  });
+});

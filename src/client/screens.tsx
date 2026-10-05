@@ -56,7 +56,7 @@ export function Home({ onLocal, onOnline, resume, onResume, online }: { onLocal:
       <div className="hero">
         <div className="kicker">IT COMPANY BATTLE</div>
         <div className="logo"><span className="y3">3</span>年で<span className="ipo">上場</span></div>
-        <div className="tag">2〜4人でIT企業の社長に。12期（3年）で一番利益を出した会社が上場！</div>
+        <div className="tag">2〜4人でIT企業の社長に。3年（または2年）で一番利益を出した会社が上場！</div>
         <svg className="ticker-chart" viewBox="0 0 300 80" preserveAspectRatio="none" aria-hidden>
           <defs><linearGradient id="gArea" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="var(--up)" stopOpacity=".35" /><stop offset="1" stopColor="var(--up)" stopOpacity="0" /></linearGradient></defs>
           <path className="area" d="M0,70 L30,62 L55,68 L85,50 L110,56 L140,40 L165,46 L195,28 L220,34 L250,16 L275,20 L300,4 L300,80 L0,80Z" />
@@ -79,7 +79,7 @@ export function Home({ onLocal, onOnline, resume, onResume, online }: { onLocal:
       <details className="fold how">
         <summary>📖 遊び方</summary>
         <div className="fold-body">
-          <p>あなたはIT企業の社長。3年（12期）で一番<b>利益</b>を出した会社が上場（勝ち）です。</p>
+          <p>あなたはIT企業の社長。3年（12期）または2年（8期）で一番<b>利益</b>を出した会社が上場（勝ち）です。</p>
           <p><b>1期の流れ</b>（全員が非公開で同時に決めます）</p>
           <ol>
             <li><b>入札フェーズ</b>：案件に入札（安いほど有利、評判が高いと割引）／エンジニアを採用／作戦カードで妨害</li>
@@ -94,9 +94,21 @@ export function Home({ onLocal, onOnline, resume, onResume, online }: { onLocal:
   );
 }
 
+// ---------- 期間（3年／2年モード） ----------
+const MODE_LABEL: Record<number, string> = { 12: '3年（12期）', 8: '2年（8期）' };
+function ModePicker({ value, onChange }: { value: number; onChange: (q: number) => void }) {
+  return (
+    <div className="field"><label>期間</label>
+      <div className="stepper">{GAME.modes.map(q => <button key={q} className={q === value ? 'on' : ''} onClick={() => { onChange(q); sfx.tap(); }}>{MODE_LABEL[q]}</button>)}</div>
+      <p className="note" style={{ marginTop: 6 }}>{value === 8 ? '2年モード：3年モードの3分の2の長さで、短めに遊びたいとき向け。' : '3年モード：じっくり遊ぶ標準ルール。'}</p>
+    </div>
+  );
+}
+
 // ---------- ローカル設定 ----------
-export function LocalSetup({ onBack, onStart }: { onBack: () => void; onStart: (names: string[]) => void }) {
+export function LocalSetup({ onBack, onStart }: { onBack: () => void; onStart: (names: string[], quarters: number) => void }) {
   const [n, setN] = useState(3);
+  const [quarters, setQuarters] = useState<number>(GAME.quarters);
   const defaults = ['ゼロイチ株式会社', 'ネオソフト', 'ピクセル堂', 'バグナシ技研'];
   const [names, setNames] = useState(defaults);
   const ok = names.slice(0, n).every(x => x.trim()) && new Set(names.slice(0, n).map(x => x.trim())).size === n;
@@ -106,13 +118,14 @@ export function LocalSetup({ onBack, onStart }: { onBack: () => void; onStart: (
       <div className="field"><label>人数</label>
         <div className="stepper">{[2, 3, 4].map(k => <button key={k} className={k === n ? 'on' : ''} onClick={() => { setN(k); sfx.tap(); }}>{k}人</button>)}</div>
       </div>
+      <ModePicker value={quarters} onChange={setQuarters} />
       {names.slice(0, n).map((v, i) => (
         <div className="field" key={i}><label>{i + 1}社目の会社名</label>
           <input className="input" value={v} maxLength={NAME_MAX} onChange={e => setNames(a => a.map((x, j) => (j === i ? e.target.value : x)))} />
         </div>
       ))}
       <p className="note">順番に端末を渡して、ほかの人に見えないように決めていきます。</p>
-      <div className="fixed-bottom"><button className="btn primary big" disabled={!ok} onClick={() => onStart(names.slice(0, n).map(x => x.trim()))}>{ok ? `${n}社でスタート！` : '会社名を入力してください（重複なし）'}</button></div>
+      <div className="fixed-bottom"><button className="btn primary big" disabled={!ok} onClick={() => onStart(names.slice(0, n).map(x => x.trim()), quarters)}>{ok ? `${n}社・${MODE_LABEL[quarters]}でスタート！` : '会社名を入力してください（重複なし）'}</button></div>
     </div>
   );
 }
@@ -142,8 +155,9 @@ export function OnlineJoin({ onBack, onJoin }: { onBack: () => void; onJoin: (ro
 }
 
 // ---------- ロビー ----------
-export function Lobby({ room, lobby, me, onStart, onLeave, connected }: { room: string; lobby: LobbyInfo | null; me: string; onStart: () => void; onLeave: () => void; connected: boolean }) {
+export function Lobby({ room, lobby, me, onStart, onLeave, connected }: { room: string; lobby: LobbyInfo | null; me: string; onStart: (quarters: number) => void; onLeave: () => void; connected: boolean }) {
   const host = lobby?.hostId === me;
+  const [quarters, setQuarters] = useState<number>(GAME.quarters);
   const n = lobby?.players.length || 0;
   const share = async () => {
     const url = `${location.origin}${location.pathname}?room=${room}`;
@@ -170,9 +184,10 @@ export function Lobby({ room, lobby, me, onStart, onLeave, connected }: { room: 
         </div>
       ))}
       {n < GAME.minPlayers && <p className="note" style={{ marginTop: 12 }}>招待リンクを送って、あと{GAME.minPlayers - n}社以上集めましょう。</p>}
+      {host ? <div style={{ marginTop: 14 }}><ModePicker value={quarters} onChange={setQuarters} /></div> : <p className="note" style={{ marginTop: 12 }}>期間（3年／2年）はホストが開始時に選びます。</p>}
       <div className="fixed-bottom">
         {host
-          ? <button className="btn primary big" disabled={n < GAME.minPlayers} onClick={onStart}>{n < GAME.minPlayers ? `${GAME.minPlayers}社から開始できます` : `${n}社でゲーム開始！`}</button>
+          ? <button className="btn primary big" disabled={n < GAME.minPlayers} onClick={() => onStart(quarters)}>{n < GAME.minPlayers ? `${GAME.minPlayers}社から開始できます` : `${n}社・${MODE_LABEL[quarters]}で開始！`}</button>
           : <div className="card" style={{ textAlign: 'center' }}>ホストの開始を待っています…</div>}
       </div>
     </div>

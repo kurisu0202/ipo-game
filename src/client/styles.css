@@ -522,3 +522,7 @@ details.fold.secret > summary { color: var(--down); }
 .link-btn { display: block; width: 100%; margin-top: 8px; padding: 8px 4px; background: none; border: 0; color: var(--down); font-size: 12px; font-weight: 700; text-align: center; cursor: pointer; }
 .link-btn:hover { text-decoration: underline; }
 .xp { margin-top: 4px; font-size: 11px; color: var(--up); font-weight: 700; display: flex; flex-wrap: wrap; gap: 8px; }
+.badge-k.place { max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge-k.place.proj { background: var(--blue-bg); color: var(--blue); }
+.badge-k.place.svc { background: var(--gold-bg); color: var(--gold); }
+.badge-k.place.free { background: var(--up-bg); color: var(--up); }

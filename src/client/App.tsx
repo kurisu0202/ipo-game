@@ -34,7 +34,7 @@ export default function App() {
       {screen === 'home' && <Home online={location.protocol !== 'file:'} resume={resume}
         onResume={() => { setSession(new LocalSession(null, resume!)); setScreen('game'); }}
         onLocal={() => setScreen('local')} onOnline={() => setScreen('online')} />}
-      {screen === 'local' && <LocalSetup onBack={() => setScreen('home')} onStart={names => { clearLocal(); setSession(new LocalSession(names)); setScreen('game'); }} />}
+      {screen === 'local' && <LocalSetup onBack={() => setScreen('home')} onStart={(names, quarters) => { clearLocal(); setSession(new LocalSession(names, undefined, quarters)); setScreen('game'); }} />}
       {screen === 'online' && <OnlineJoin onBack={() => setScreen('home')} onJoin={(room, name) => {
         history.replaceState(null, '', `?room=${room}`);
         setSession(new OnlineSession(room, name)); setScreen('game');
@@ -67,7 +67,7 @@ function Playing({ session, onExit }: { session: Session; onExit: () => void }) 
   const isHost = snap.lobby?.hostId === snap.me;
   let body: React.ReactNode = null;
   if (snap.stage === 'lobby' || !g) {
-    body = <Lobby room={snap.room} lobby={snap.lobby} me={snap.me} connected={snap.connected} onStart={() => session.start()} onLeave={onExit} />;
+    body = <Lobby room={snap.room} lobby={snap.lobby} me={snap.me} connected={snap.connected} onStart={quarters => session.start(quarters)} onLeave={onExit} />;
   } else if (snap.stage === 'pass' && g.phase !== 'end') {
     body = <PassScreen g={g} cid={snap.me} onOpen={() => session.openTurn()} />;
   } else {

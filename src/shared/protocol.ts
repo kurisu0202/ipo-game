@@ -64,12 +64,12 @@ function need(d: RoomData | null, cid: string): RoomData {
   return d;
 }
 
-export function startGame(cur: RoomData | null, cid: string, seed: number): RoomData {
+export function startGame(cur: RoomData | null, cid: string, seed: number, quarters: number = GAME.quarters): RoomData {
   const d = need(cur, cid);
   if (d.game && d.game.phase !== 'end') throw new Error('すでに始まっています');
   if (d.players.length < GAME.minPlayers) throw new Error(`${GAME.minPlayers}社以上で開始できます`);
   d.hostId = cid;
-  d.game = createGame(d.players.map(p => ({ id: p.id, name: p.name })), seed, `online-${seed >>> 0}`);
+  d.game = createGame(d.players.map(p => ({ id: p.id, name: p.name })), seed, `online-${seed >>> 0}`, quarters);
   return d;
 }
 

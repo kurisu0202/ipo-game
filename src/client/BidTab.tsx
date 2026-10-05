@@ -1,7 +1,7 @@
 // ===== 入札タブ =====
 import { useState } from 'react';
-import { ABANDON, BID_PCTS, CARDS, DESIGN_BONUS, INTERIM, DUMP_RATE, ENGINEER, FIRE_DEBT, GAME, HIRE_FEES, LATE_PENALTY, PROJECT_TYPES, REPEAT_BONUS, REP_DISCOUNT, SECRET_MULTS, SKILLS, SKILL_NAME, STOCK_CHANCE, TAGS } from '../logic/config';
-import { checkReqs, quarterLabel, round10, skillSum, sumSkills } from '../logic/calc';
+import { ABANDON, BID_PCTS, CARDS, DESIGN_BONUS, INTERIM, DUMP_RATE, ENGINEER, FIRE_DEBT, HIRE_FEES, LATE_PENALTY, PROJECT_TYPES, REPEAT_BONUS, REP_DISCOUNT, SECRET_MULTS, SKILLS, SKILL_NAME, STOCK_CHANCE, TAGS } from '../logic/config';
+import { checkReqs, quarterLabel, round10, skillSum, sumSkills, totalQ } from '../logic/calc';
 import { bidAmount, pendingSpies } from '../logic/game';
 import type { BidPct, BidSubmit, CardKey, Company, Game, HireFee, Project, Skills } from '../logic/types';
 import type { PlayerView } from '../logic/view';
@@ -173,7 +173,7 @@ function ProjectDetail({ g, me, p, pct, dumping, onClose }: { g: Game; me: Compa
   const spec = PROJECT_TYPES[p.type];
   const secret = p.type === 'secret';
   const haggle = p.tags.includes('haggle');
-  const last = GAME.quarters - 1;
+  const last = totalQ(g) - 1;
   const doneQ = g.q + p.duration - 1;            // 最短で完了する期（落札した期の開発フェーズから着手）
   const tooLate = doneQ > last;
   const sal = salaryEstimate(p.reqs);
@@ -205,7 +205,7 @@ function ProjectDetail({ g, me, p, pct, dumping, onClose }: { g: Game; me: Compa
         <b>💰 お金が入るのは</b>
         <p style={{ margin: '6px 0 0' }}>{when}</p>
         {tooLate
-          ? <div className="warn" style={{ marginTop: 8 }}>⚠ 普通に進めると{GAME.quarters}期目（{quarterLabel(last)}）までに終わりません。突貫（1期で2進む・負債+2）が必要です。受け取れるのは進んだ分の中間金だけです</div>
+          ? <div className="warn" style={{ marginTop: 8 }}>⚠ 普通に進めると{totalQ(g)}期目（{quarterLabel(last)}）までに終わりません。突貫（1期で2進む・負債+2）が必要です。受け取れるのは進んだ分の中間金だけです</div>
           : <p className="note" style={{ margin: '6px 0 0' }}>必要スキルを満たす社員を割り当てると1期に1進みます。足りない期は進まず、締切（{quarterLabel(doneQ)}）より遅れると1期ごとに報酬−{LATE_PENALTY * 100}%</p>}
       </div>
       <div className="card">

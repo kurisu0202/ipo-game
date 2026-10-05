@@ -1,9 +1,9 @@
 // ===== ゲーム画面 =====
 import { useEffect, useMemo, useState } from 'react';
 import { CARDS, GAME, HAPPENINGS, PROJECT_TYPES, SEASONS, SERVICE } from '../logic/config';
-import { payroll, projectCheck, quarterLabel, season, yen } from '../logic/calc';
+import { payroll, projectCheck, quarterLabel, season, totalQ, totalYears, working, yen } from '../logic/calc';
 import { defaultDev, emptyBid } from '../logic/game';
-import type { ActiveProject, BidSubmit, Company, DevSubmit, Game as G } from '../logic/types';
+import type { ActiveProject, BidSubmit, Company, DevSubmit, Engineer, Game as G } from '../logic/types';
 import type { PlayerView } from '../logic/view';
 import { phaseKey, type ChatMsg } from '../shared/protocol';
 import { BidTab, CardDetail, CardTile } from './BidTab';
@@ -59,13 +59,13 @@ export function GameScreen({ snap, onSubmit, onCancel, onExit, onAgain, onChat, 
           <button className="icon-btn" aria-label="終了" onClick={() => { if (confirm(snap.mode === 'local' ? 'ホームに戻りますか？（続きから再開できます）' : 'ゲームから抜けますか？（同じルームIDと会社名で戻れます）')) onExit(); }}>✕</button>
           <button className="icon-btn" aria-label="効果音" onClick={() => { setSound(!sound); setSnd(!sound); }}>{sound ? '🔊' : '🔇'}</button>
           <div className="hdr-mid">
-            <div className="q">{quarterLabel(g.q)}<span className="faint" style={{ fontSize: 11, marginLeft: 6 }}>第{g.q + 1}期/{GAME.quarters}</span></div>
+            <div className="q">{quarterLabel(g.q)}<span className="faint" style={{ fontSize: 11, marginLeft: 6 }}>第{g.q + 1}期/{totalQ(g)}</span></div>
             <span className={`ph ${g.phase}`}>{g.phase === 'bid' ? '入札フェーズ' : '開発フェーズ'}</span>
           </div>
           <div className={`cash ${me.cash < 0 ? 'neg' : ''}`}><small>現金（万円）</small><CountUp v={me.cash} /></div>
         </div>
         <div className="progress12">
-          {Array.from({ length: GAME.quarters }, (_, i) => <i key={i} className={`${i < g.q ? 'done' : i === g.q ? 'now' : ''} ${i > 0 && i % 4 === 0 ? 'year' : ''}`} title={quarterLabel(i)} />)}
+          {Array.from({ length: totalQ(g) }, (_, i) => <i key={i} className={`${i < g.q ? 'done' : i === g.q ? 'now' : ''} ${i > 0 && i % 4 === 0 ? 'year' : ''}`} title={quarterLabel(i)} />)}
         </div>
         <button className="happen" onClick={() => setHappen(true)}>
           <span className="hi">{h.icon}</span><span className="grow ellipsis"><b>{h.name}</b>　<span className="muted">{h.desc}</span></span><span className="more">詳しく ›</span>
@@ -158,6 +158,17 @@ function MeTab({ v, me }: { v: PlayerView; me: Company }) {
   const g = v.game;
   const [detail, setDetail] = useState<null | (typeof me.hand)[number]>(null);
   const [proj, setProj] = useState<string | null>(null);
+  // 社員の担当：案件／サービス／空き（入札フェーズでは前の期の担当がそのまま次の開発の初期値）
+  const placeOf = (e: Engineer): { kind: 'proj' | 'svc' | 'free'; label: string } => {
+    const p = e.assign && e.assign !== 'svc' ? me.projects.find(x => x.id === e.assign) : null;
+    if (p) return { kind: 'proj', label: `🛠️ ${p.name}` };
+    if (e.assign === 'svc' && me.service) return { kind: 'svc', label: '🚀 サービス' };
+    return { kind: 'free', label: '☕ 空き' };
+  };
+  const order = { free: 0, proj: 1, svc: 2 };
+  const sortedStaff = [...me.engineers].sort((a, b) => order[placeOf(a).kind] - order[placeOf(b).kind]);
+  const staff = { proj: 0, svc: 0, free: 0, rest: me.engineers.filter(e => !working(g, e)).length };
+  me.engineers.forEach(e => { staff[placeOf(e).kind]++; });
   const pay = payroll(g, me).reduce((t, e) => t + e.salary, 0);
   return (
     <div className="content">
@@ -170,9 +181,16 @@ function MeTab({ v, me }: { v: PlayerView; me: Company }) {
       </div>
       <div className="card" style={{ marginTop: 10 }}><div className="row"><b>現金の推移</b><span className="grow" /><span className="note">開始 {GAME.startCash}</span></div><Sparkline values={me.history} color={companyColor(g, me.id)} /></div>
       <div className="sec-title">👥 社員 <span className="n">{me.engineers.length}</span><small>給料の合計 {pay}万円/期（貸し出し中を含む）</small></div>
-      {me.engineers.map(e => (
-        <div className="eng" key={e.id}><Face name={e.name} /><div className="grow">
-          <div className="row" style={{ gap: 5, flexWrap: 'wrap' }}><span className="nm">{e.name}</span><EngBadges g={g} e={e} me={me} /></div>
+      <div className="chips" style={{ margin: '0 2px 8px' }}>
+        <span className="chip blue">🛠️ 案件 {staff.proj}人</span>
+        {me.service && <span className="chip gold">🚀 サービス {staff.svc}人</span>}
+        <span className={`chip ${staff.free ? 'up' : ''}`}>☕ 空き {staff.free}人</span>
+        {staff.rest > 0 && <span className="chip">😷 休み {staff.rest}人</span>}
+      </div>
+      {g.phase === 'dev' && <div className="note" style={{ margin: '0 2px 8px' }}>※ 前の期の担当です。今期の割り当ては「開発」タブで変更できます</div>}
+      {sortedStaff.map(e => (
+        <div className={`eng ${placeOf(e).kind === 'free' ? 'free' : ''}`} key={e.id}><Face name={e.name} /><div className="grow">
+          <div className="row" style={{ gap: 5, flexWrap: 'wrap' }}><span className="nm">{e.name}</span><span className={`badge-k place ${placeOf(e).kind}`}>{placeOf(e).label}</span><EngBadges g={g} e={e} me={me} /></div>
           <div style={{ marginTop: 4 }}><SkillChips skills={e.skills} /></div><XpLine e={e} /><div className="sal">給料 {e.salary}</div></div></div>
       ))}
       {g.companies.flatMap(c => c.engineers.filter(e => e.loan?.from === me.id).map(e => (
@@ -241,7 +259,7 @@ function FinalScreen({ g, me, onExit, onAgain, isHost, mode }: { g: G; me: strin
         <div className="crown">🔔</div>
         <div className="note" style={{ letterSpacing: '.3em' }}>上場決定</div>
         <div className="wname">{top.map(r => r.name).join('・')}</div>
-        <div className="note">3年間の利益 {top[0] ? `${top[0].profit >= 0 ? '+' : ''}${top[0].profit.toLocaleString()}万円` : ''}</div>
+        <div className="note">{totalYears(g)}年間の利益 {top[0] ? `${top[0].profit >= 0 ? '+' : ''}${top[0].profit.toLocaleString()}万円` : ''}</div>
       </div>
       {rows.map(r => (
         <div className={`card ${r.id === me ? 'hl' : ''}`} key={r.id}>

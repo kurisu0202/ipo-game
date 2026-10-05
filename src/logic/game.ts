@@ -12,7 +12,7 @@ import {
 } from './config';
 import {
   assignees, checkReqs, companyOf, effSkills, payroll, quarterLabel, round10, season, servicePower, serviceNeed,
-  signedYen, skillSum, sumSkills, working, yen,
+  signedYen, skillSum, sumSkills, totalQ, totalYears, working, yen,
 } from './calc';
 import { chance, int, pick, shuffle, weighted } from './rng';
 import type {
@@ -126,17 +126,18 @@ function drawCard(g: Game, c: Company) {
 // ---------------------------------------------------------------------
 //  ゲーム作成・期の開始
 // ---------------------------------------------------------------------
-export function createGame(players: { id: string; name: string }[], seed: number, id = 'local'): Game {
+export function createGame(players: { id: string; name: string }[], seed: number, id = 'local', quarters: number = GAME.quarters): Game {
+  if (!(GAME.modes as readonly number[]).includes(quarters)) quarters = GAME.quarters;
   if (players.length < GAME.minPlayers || players.length > GAME.maxPlayers) throw new Error(`参加は${GAME.minPlayers}〜${GAME.maxPlayers}社です`);
   const g: Game = {
-    id, q: -1, phase: 'bid', seed: seed | 0, happenings: [], market: [], pool: [], offers: [],
+    id, quarters, q: -1, phase: 'bid', seed: seed | 0, happenings: [], market: [], pool: [], offers: [],
     cardDeck: [], cardDiscard: [], companies: [], log: [], bidSubs: {}, devSubs: {}, secretMult: {},
     reveal: null, revealSeq: 0, final: null, nextId: 1,
   };
   const deck: CardKey[] = [];
   (Object.keys(CARDS) as CardKey[]).forEach(k => { for (let i = 0; i < CARDS[k].count; i++) deck.push(k); });
   g.cardDeck = shuffle(g, deck);
-  g.happenings = shuffle(g, Object.keys(HAPPENINGS) as HappeningKey[]).slice(0, GAME.quarters);
+  g.happenings = shuffle(g, Object.keys(HAPPENINGS) as HappeningKey[]).slice(0, quarters);
   for (const pl of players) {
     const c: Company = {
       id: pl.id, name: pl.name, cash: GAME.startCash, rep: 0, debt: 0, engineers: [], projects: [], service: null,
@@ -871,7 +872,7 @@ export function resolveDev(g: Game) {
   g.revealSeq++;
   log(g, `${quarterLabel(q)} の決算：` + g.companies.map(c => `${c.name} ${yen(c.cash)}`).join(' / '));
 
-  if (q >= GAME.quarters - 1) finalize(g);
+  if (q >= totalQ(g) - 1) finalize(g);
   else startQuarter(g);
 }
 
@@ -1011,13 +1012,13 @@ export function finalize(g: Game) {
       { label: '現金', value: yen(r.cash) },
       { label: `自社サービス`, value: yen(r.service) },
       { label: `株（${r.stocks.length}株）`, value: r.stocks.length ? `${r.stocks.map(v => v.toLocaleString()).join('+')} = ${yen(r.stockTotal)}` : '0万円' },
-      { label: '3年間の利益', value: signedYen(r.profit), win: r.rank === 1 },
+      { label: `${totalYears(g)}年間の利益`, value: signedYen(r.profit), win: r.rank === 1 },
     ],
     stamp: r.rank === 1 ? { type: 'ipo', text: '上場決定！', tone: 'gold' } : { type: 'rank', text: `${r.rank}位`, tone: 'muted' },
   }));
   // 最終期の決算発表も一緒に見せる
   const last = g.reveal && g.reveal.kind === 'dev' && g.reveal.q === g.q ? g.reveal : null;
-  const lastBlocks: RevealBlock[] = last ? [...last.blocks, { kind: 'info', icon: '🔔', title: 'そして、3年間の総決算へ…', lines: [{ text: '現金・サービス価値・株を合計して利益を計算します', tone: 'muted' }], stamp: { type: 'info', text: '最終決算', tone: 'gold' } }] : [];
+  const lastBlocks: RevealBlock[] = last ? [...last.blocks, { kind: 'info', icon: '🔔', title: `そして、${totalYears(g)}年間の総決算へ…`, lines: [{ text: '現金・サービス価値・株を合計して利益を計算します', tone: 'muted' }], stamp: { type: 'info', text: '最終決算', tone: 'gold' } }] : [];
   g.reveal = { kind: 'final', q: g.q, title: last ? `${quarterLabel(g.q)} 決算 ＆ 最終決算` : '最終決算', blocks: [...lastBlocks, ...blocks], headlines: [`【速報】${rows.filter(r => r.rank === 1).map(r => r.name).join('・')}、東証グロース市場に上場へ`, ...(last?.headlines || [])] };
   g.revealSeq++;
   log(g, `最終決算：${rows.map(r => `${r.rank}位 ${r.name}（${signedYen(r.profit)}）`).join(' / ')}`);

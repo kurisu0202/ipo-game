@@ -23,7 +23,7 @@ export interface Session {
   subscribe(fn: () => void): () => void;
   submit(data: BidSubmit | DevSubmit): void;
   cancel(): void;
-  start(): void;
+  start(quarters?: number): void;
   again(): void;
   chat(text: string): void;
   openTurn(): void;
@@ -41,7 +41,7 @@ abstract class Base implements Session {
   protected set(p: Partial<Snapshot>) { this.snap = { ...this.snap, ...p }; this.subs.forEach(f => f()); }
   abstract submit(data: BidSubmit | DevSubmit): void;
   abstract cancel(): void;
-  abstract start(): void;
+  abstract start(quarters?: number): void;
   abstract again(): void;
   chat(_text: string) { /* ローカルではなし */ }
   openTurn() { /* オンラインではなし */ }
@@ -58,16 +58,16 @@ export function savedLocal(): Game | null {
 export function clearLocal() { try { localStorage.removeItem(LOCAL_KEY); } catch { /* 無視 */ } }
 
 // ゲームごとに別のIDにする（演出の既読管理がゲームをまたいで混ざらないように）
-function newLocalGame(names: string[]): Game {
+function newLocalGame(names: string[], quarters?: number): Game {
   const seed = (Math.random() * 2 ** 31) | 0;
-  return createGame(names.map((n, i) => ({ id: `c${i}`, name: n })), seed, `local-${seed}-${Date.now().toString(36)}`);
+  return createGame(names.map((n, i) => ({ id: `c${i}`, name: n })), seed, `local-${seed}-${Date.now().toString(36)}`, quarters);
 }
 
 export class LocalSession extends Base {
   private g: Game;
-  constructor(names: string[] | null, resume?: Game) {
+  constructor(names: string[] | null, resume?: Game, quarters?: number) {
     super({ mode: 'local', stage: 'pass' });
-    this.g = resume ?? newLocalGame(names!);
+    this.g = resume ?? newLocalGame(names!, quarters);
     this.refresh('pass');
   }
   private current(): string {
@@ -91,7 +91,7 @@ export class LocalSession extends Base {
   start() { /* 作成時に開始済み */ }
   again() {
     const names = this.g.companies.map(c => c.name);
-    this.g = newLocalGame(names);
+    this.g = newLocalGame(names, this.g.quarters);
     this.refresh('pass');
   }
   leave() { if (this.g.phase === 'end') clearLocal(); }
@@ -154,9 +154,9 @@ export class OnlineSession extends Base {
     this.act((d, me) => submitMove(d, me, data, pk));
   }
   cancel() { this.act(cancelMove); }
-  start() {
+  start(quarters?: number) {
     const seed = crypto.getRandomValues(new Uint32Array(1))[0] | 0;
-    this.act((d, me) => startGame(d, me, seed));
+    this.act((d, me) => startGame(d, me, seed, quarters));
   }
   again() { this.act(backToLobby); }
   chat(text: string) { const at = Date.now(); this.act((d, me) => addChat(d, me, text, at)); }

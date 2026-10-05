@@ -10,7 +10,8 @@ export const SKILL_ICON: Record<Skill, string> = { FE: '🖥️', BE: '⚙️', 
 export const SEASONS = ['春', '夏', '秋', '冬'];
 
 export const GAME = {
-  quarters: 12,
+  quarters: 12,                  // 標準（3年モード）
+  modes: [12, 8] as const,        // 選べる長さ：3年（12期）・2年（8期）
   minPlayers: 2,
   maxPlayers: 4,
   startCash: 2000,
