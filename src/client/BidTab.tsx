@@ -1,7 +1,7 @@
 // ===== 入札タブ =====
 import { useState } from 'react';
-import { ABANDON, BID_PCTS, CARDS, DESIGN_BONUS, INTERIM, DUMP_RATE, ENGINEER, FIRE_DEBT, HIRE_FEES, LATE_PENALTY, PROJECT_TYPES, REPEAT_BONUS, REP_DISCOUNT, SECRET_MULTS, SKILLS, SKILL_NAME, STOCK_CHANCE, TAGS } from '../logic/config';
-import { checkReqs, quarterLabel, round10, skillSum, sumSkills, totalQ } from '../logic/calc';
+import { ABANDON, BID_PCTS, CARDS, INDUSTRIES, DESIGN_BONUS, INTERIM, DUMP_RATE, ENGINEER, FIRE_DEBT, HIRE_FEES, LATE_PENALTY, PROJECT_TYPES, REPEAT_BONUS, REP_DISCOUNT, SECRET_MULTS, SKILLS, SKILL_NAME, STOCK_CHANCE, TAGS } from '../logic/config';
+import { bidFactor, canBid, checkReqs, hireBonus, payFactor, quarterLabel, round10, skillSum, sumSkills, totalQ } from '../logic/calc';
 import { bidAmount, pendingSpies } from '../logic/game';
 import type { BidPct, BidSubmit, CardKey, Company, Game, HireFee, Project, Skills } from '../logic/types';
 import type { PlayerView } from '../logic/view';
@@ -63,7 +63,7 @@ export function BidTab({ v, me, draft, set, locked }: P) {
               <div className="grow">
                 <div className="row" style={{ gap: 6 }}><b>{e.name}</b>
                   {e.legend && <span className="badge-k legend">伝説</span>}{e.rookie && <span className="badge-k rookie">新人</span>}</div>
-                <div className="note">給料 <b>{e.salary}</b>万円/期{e.rookie ? '・毎年春に成長' : ''}</div>
+                <div className="note">給料 <b>{e.salary}</b>万円/期{e.rookie ? '・毎年春に成長' : ''}{hireBonus(me, e) ? <span className="up">・業種ボーナス：契約金が同額なら勝つ</span> : null}</div>
               </div>
             </div>
             <div style={{ margin: '8px 0' }}><SkillChips skills={e.skills} /></div>
@@ -125,6 +125,9 @@ function ProjectBidCard({ g, me, p, pct, dumping, locked, onPick }: { g: Game; m
   const secret = p.type === 'secret';
   const warn = capacityWarn(g, me, p.reqs);
   const banned = me.effects.noBid === g.q;
+  const blocked = !canBid(me, p.type);
+  const bf = bidFactor(me, p.type);
+  const pf = payFactor(me, p.type);
   const [info, setInfo] = useState(false);
   const lp = useLongPress(() => setInfo(true));
   return (
@@ -133,6 +136,8 @@ function ProjectBidCard({ g, me, p, pct, dumping, locked, onPick }: { g: Game; m
       <div className="proj-top">
         <span className={`ptype ${p.type}`}>{spec.icon} {spec.name}</span>
         {p.tags.map(t => <span key={t} className={`tag ${t === 'muri' || t === 'haggle' || t === 'legacy' ? 'bad' : ''}`}>{TAGS[t].name}：{TAGS[t].desc}</span>)}
+        {blocked ? <span className="tag bad">業種により入札不可</span> : bf < 1 ? <span className="tag good">得意：比較−{Math.round((1 - bf) * 100)}%</span> : bf > 1 ? <span className="tag bad">苦手：比較+{Math.round((bf - 1) * 100)}%</span> : null}
+        {pf !== 1 && <span className={`tag ${pf > 1 ? 'good' : 'bad'}`}>受け取り×{Math.round(pf * 100) / 100}</span>}
         <span className="chip" style={{ marginLeft: 'auto' }}>⏱ {p.duration}期</span>
       </div>
       <div className="proj-name">{p.name}</div>
@@ -146,14 +151,15 @@ function ProjectBidCard({ g, me, p, pct, dumping, locked, onPick }: { g: Game; m
       {warn && <div className="warn" style={{ marginTop: 8 }}>⚠ {warn}</div>}
       <div className="bidline">
         <div className="result">
-          {banned ? <span className="down">📰 情報漏洩の噂で今期は入札禁止</span>
+          {blocked ? <span className="down">業種（{me.industry ? INDUSTRIES[me.industry].name : ''}）の都合で入札できません</span>
+            : banned ? <span className="down">📰 情報漏洩の噂で今期は入札禁止</span>
             : pct ? (secret ? <span>予算の<span className="gold">{pct}%</span>{dumping ? `×${DUMP_RATE}` : ''}で入札（金額は非公開）</span>
               : <span><span className="num gold" style={{ fontSize: 18 }}>{bidAmount(p.budget, pct, dumping).toLocaleString()}</span>万円で入札{dumping ? '（ダンピング込み）' : ''}</span>)
               : <span className="faint">見送り</span>}
         </div>
         <div className="seg">
           <button className={!pct ? 'on' : 'off'} disabled={locked} onClick={() => onPick(undefined)}>見送り</button>
-          {BID_PCTS.map(x => <button key={x} className={pct === x ? 'on gold' : ''} disabled={locked} onClick={() => onPick(x as BidPct)}>{x}%</button>)}
+          {BID_PCTS.map(x => <button key={x} className={pct === x ? 'on gold' : ''} disabled={locked || blocked} onClick={() => onPick(x as BidPct)}>{x}%</button>)}
         </div>
       </div>
     </div>
@@ -180,14 +186,17 @@ function ProjectDetail({ g, me, p, pct, dumping, onClose }: { g: Game; me: Compa
   const cost = sal.perQ * p.duration;
   const rows = BID_PCTS.map(x => {
     const price = secret ? 0 : bidAmount(p.budget, x, dumping);
-    const got = round10(price * (haggle ? TAGS.haggle.mult! : 1)) + (p.tags.includes('repeat') ? REPEAT_BONUS : 0);
+    const got = round10(price * (haggle ? TAGS.haggle.mult! : 1) * payFactor(me, p.type)) + (p.tags.includes('repeat') ? REPEAT_BONUS : 0);
     return { x, price, got, profit: got - cost };
   });
-  const diff = haggle || p.tags.includes('repeat');   // 受注額と受け取りが違うときだけ列を出す
+  const diff = haggle || p.tags.includes('repeat') || payFactor(me, p.type) !== 1;   // 受注額と受け取りが違うときだけ列を出す
   const when = p.pay === 'turn'
     ? `進んだ期ごとに、その期の決算で 受注額÷${p.duration} ずつ（最短 ${quarterLabel(g.q)}〜${quarterLabel(Math.min(doneQ, last))}）`
     : `進んだ期ごとに中間金（受注額の${INTERIM * 100}%÷${p.duration}）を受け取り、残りは完了した期の決算で（最短 ${quarterLabel(Math.min(doneQ, last))}）`;
   const notes: string[] = [];
+  if (payFactor(me, p.type) !== 1) notes.push(`業種（${INDUSTRIES[me.industry!].name}）：受け取り×${Math.round(payFactor(me, p.type) * 100) / 100}（表に含めています）`);
+  if (bidFactor(me, p.type) !== 1) notes.push(`業種（${INDUSTRIES[me.industry!].name}）：入札の比較値×${bidFactor(me, p.type)}（${bidFactor(me, p.type) < 1 ? '得意' : '苦手'}）`);
+  if (!canBid(me, p.type)) notes.push(`業種（${INDUSTRIES[me.industry!].name}）：この種類の案件には入札できません`);
   if (haggle) notes.push(`値切り屋：受け取りは受注額の×${TAGS.haggle.mult}`);
   if (p.tags.includes('repeat')) notes.push(`リピートあり：完了時に+${REPEAT_BONUS}（表に含めています）`);
   if (p.tags.includes('record')) notes.push('実績になる：完了で評判+1（次からの入札が有利に）');

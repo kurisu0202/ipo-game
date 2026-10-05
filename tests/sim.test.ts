@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createGame, submit, tryResolve } from '../src/logic/game';
-import { randomBid, randomDev, smartBid, smartDev } from '../src/logic/bots';
+import { pickIndustry, randomBid, randomDev, smartBid, smartDev } from '../src/logic/bots';
 import { GAME } from '../src/logic/config';
 import type { Game } from '../src/logic/types';
 
@@ -28,7 +28,7 @@ function play(n: number, seed: number, smart: boolean) {
   const r = rng(seed * 7 + 1);
   for (let step = 0; step < 100 && g.phase !== 'end'; step++) {
     g.companies.forEach(c => {
-      const s = g.phase === 'bid' ? (smart ? smartBid : randomBid)(g, c.id, r) : (smart ? smartDev : randomDev)(g, c.id, r);
+      const s = g.phase === 'pick' ? pickIndustry(g, c.id, r) : g.phase === 'bid' ? (smart ? smartBid : randomBid)(g, c.id, r) : (smart ? smartDev : randomDev)(g, c.id, r);
       submit(g, c.id, s);
     });
     expect(tryResolve(g)).toBe(true);
@@ -62,7 +62,7 @@ describe('2年モード', () => {
       const r = rng(i + 3);
       expect(g.happenings).toHaveLength(8);
       for (let step = 0; step < 100 && g.phase !== 'end'; step++) {
-        g.companies.forEach(c => submit(g, c.id, g.phase === 'bid' ? smartBid(g, c.id, r) : smartDev(g, c.id, r)));
+        g.companies.forEach(c => submit(g, c.id, g.phase === 'pick' ? pickIndustry(g, c.id, r) : g.phase === 'bid' ? smartBid(g, c.id, r) : smartDev(g, c.id, r)));
         expect(tryResolve(g)).toBe(true);
         invariants(g);
       }

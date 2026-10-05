@@ -2,7 +2,7 @@
 //  3年で上場 ― 数値設定（バランス調整はこのファイルだけで行う）
 //  金額の単位はすべて「万円」、期間の単位は「期」（四半期）
 // =====================================================================
-import type { CardKey, HappeningKey, ProjectType, Skill, SpyOrder, Tag } from './types';
+import type { CardKey, IndustryKey, HappeningKey, ProjectType, Skill, SpyOrder, Tag } from './types';
 
 export const SKILLS: Skill[] = ['FE', 'BE', 'IN', 'DE', 'SE', 'AI'];
 export const SKILL_NAME: Record<Skill, string> = { FE: 'フロント', BE: 'バック', IN: 'インフラ', DE: 'デザイン', SE: 'セキュリティ', AI: 'AI' };
@@ -170,3 +170,51 @@ export const HAPPENING_FX = { secNews: 1.3, recession: 0.8, aiBoom: 1.5, rentPer
 
 // ---------- 最終決算の表彰（追加要素） ----------
 export const AWARDS = true;
+
+// ---------- 業種（ゲーム開始時にランダムに2つ配られ、1つ選ぶ） ----------
+export interface IndustrySpec {
+  name: string; icon: string; plan: string; good: string[]; bad: string[];
+  bidGood?: ProjectType[];       // 入札の比較値 ×INDUSTRY_BID.good
+  bidBad?: ProjectType[];        // 入札の比較値 ×INDUSTRY_BID.bad
+  noBid?: ProjectType[];         // 入札できない
+  pay?: Partial<Record<ProjectType | 'all', number>>;   // 案件の受け取り倍率
+  hireSkills?: Skill[];          // このスキルを持つ候補の採用で、契約金の比較に +INDUSTRY_HIRE_BONUS
+  launchMult?: number; serviceMult?: number; salaryMult?: number;
+  rushDebt?: number; secretUp?: boolean; spyBonus?: number; fewerStaff?: number; startRep?: number;
+}
+export const INDUSTRY_BID = { good: 0.9, bad: 1.1 };
+export const INDUSTRY_HIRE_BONUS = 10;   // 契約金は50刻みなので、実質「同額なら勝つ」
+export const INDUSTRIES: Record<IndustryKey, IndustrySpec> = {
+  sier: {
+    name: 'SIer（大手受託）', icon: '🏢', plan: '大きく長い案件を確実に取る',
+    good: ['大型システム・官公庁の入札が比較で−10%', '大型システム・官公庁の受け取り×1.15'], bad: ['スピード案件・スタートアップの入札は比較で+10%'],
+    bidGood: ['big', 'gov'], bidBad: ['speed', 'startup'], pay: { big: 1.15, gov: 1.15 },
+  },
+  web: {
+    name: 'Web制作会社', icon: '⚡', plan: '短い案件を数多く回す',
+    good: ['スピード案件・デザイン重視の受け取り×1.15'],
+    bad: ['大型システム・官公庁の入札は比較で+10%'],
+    bidBad: ['big', 'gov'], pay: { speed: 1.15, design: 1.15 },
+  },
+  saas: {
+    name: 'SaaSスタートアップ', icon: '🚀', plan: 'サービスを育てて最終決算で勝つ',
+    good: ['自社サービスの立ち上げ費が半額', 'サービス収入×1.2'], bad: ['受託案件の受け取り×0.9'],
+    launchMult: 0.5, serviceMult: 1.2, pay: { all: 0.9 },
+  },
+  ai: {
+    name: 'AIベンチャー', icon: '🧠', plan: '少数精鋭で高単価のAI案件を狙う',
+    good: ['AI案件の入札が比較で−10%', 'AI案件の受け取り×1.3'], bad: ['給料の支払い×1.1（AI人材は高い）'],
+    bidGood: ['ai'], pay: { ai: 1.3 }, salaryMult: 1.1,
+  },
+  maint: {
+    name: '運用保守ベンダー', icon: '🔧', plan: '堅実な安定収入で逃げ切る',
+    good: ['保守運用の入札が比較で−10%', '保守運用の受け取り×1.5', '突貫工事の負債が+2→+1'], bad: ['炎上火消し・海外案件には入札できない'],
+    bidGood: ['maint'], pay: { maint: 1.5 }, rushDebt: 1, noBid: ['fire', 'overseas'],
+  },
+  consul: {
+    name: 'コンサル', icon: '🕶️', plan: '情報戦と一発逆転',
+    good: ['極秘案件の入札が比較で−10%', '極秘案件の倍率が1段階良くなる', 'スパイ指令が1回多い'], bad: ['保守運用には入札できない'],
+    bidGood: ['secret'], secretUp: true, spyBonus: 1, noBid: ['maint'],
+  },
+};
+

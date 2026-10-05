@@ -5,6 +5,7 @@ export type ProjectType = 'speed' | 'big' | 'maint' | 'startup' | 'gov' | 'fire'
 export type Tag = 'rush' | 'rich' | 'repeat' | 'muri' | 'legacy' | 'record' | 'haggle';
 export type CardKey = 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7' | 'A8' | 'A9' | 'S1' | 'D1' | 'D2' | 'D3' | 'D4' | 'D5' | 'D6' | 'D7' | 'D8' | 'D9';
 export type HappeningKey = 'H1' | 'H2' | 'H3' | 'H4' | 'H5' | 'H6' | 'H7' | 'H8' | 'H9' | 'H10' | 'H11' | 'H12' | 'H13' | 'H14' | 'H15' | 'H16' | 'H17' | 'H18';
+export type IndustryKey = 'sier' | 'web' | 'saas' | 'ai' | 'maint' | 'consul';
 export type Skills = Partial<Record<Skill, number>>;
 
 export interface Engineer {
@@ -43,6 +44,8 @@ export interface Company {
   hitsThisQuarter: number; yearProfit: number; completed: number;
   sleeper: { engineerId: string; order: SpyOrder } | null;
   spyOrdersLeft: number; honestLoans: number; honestAwarded: boolean;
+  industry?: IndustryKey;          // 選んだ業種
+  choices?: IndustryKey[];         // 配られた業種の候補（本人だけに見える）
   secretNotes: string[];
   quarterStartCash: number;
   history: number[];            // 各期末の現金（グラフ用）
@@ -65,6 +68,8 @@ export interface BidSubmit {
   spyOrders: Record<string, SpyOrder>;
 }
 
+export interface PickSubmit { industry: IndustryKey }
+
 export interface DevSubmit {
   assign: Record<string, string | 'svc' | '' | 'fire'>;
   rush: string[];
@@ -79,7 +84,7 @@ export interface DevSubmit {
 }
 
 export interface Game {
-  id: string; q: number; phase: 'bid' | 'dev' | 'end';
+  id: string; q: number; phase: 'pick' | 'bid' | 'dev' | 'end';
   quarters?: number;   // 全体の期数（12=3年モード、8=2年モード）。古いデータでは無い
   seed: number;
   happenings: HappeningKey[];
@@ -89,6 +94,7 @@ export interface Game {
   companies: Company[]; log: string[];
   bidSubs: Record<string, BidSubmit>;
   devSubs: Record<string, DevSubmit>;
+  pickSubs?: Record<string, PickSubmit>;   // 業種選び
   secretMult: Record<string, number>;   // 極秘案件の倍率（完了時に決まる）
   hackSkill?: string;
   reveal: Reveal | null;                // 直前の解決結果の発表
@@ -108,7 +114,7 @@ export interface RevealBlock {
   stamp: { type: Stamp; text: string; tone?: 'good' | 'bad' | 'gold' | 'blue' | 'muted' };
   owner?: string;             // 会社ブロックの会社ID
 }
-export interface Reveal { kind: 'bid' | 'dev' | 'final'; q: number; title: string; blocks: RevealBlock[]; headlines: string[] }
+export interface Reveal { kind: 'pick' | 'bid' | 'dev' | 'final'; q: number; title: string; blocks: RevealBlock[]; headlines: string[] }
 
 export interface FinalRow {
   id: string; name: string; cash: number; service: number; stocks: number[]; stockTotal: number; total: number; profit: number; rank: number;
@@ -120,6 +126,6 @@ export interface View {
   me: string;                       // 見ている会社ID（観戦なら ''）
   game: Game;                       // 秘密を取り除いたゲーム状態
   submitted: Record<string, boolean>;
-  mySubmit: BidSubmit | DevSubmit | null;
+  mySubmit: BidSubmit | DevSubmit | PickSubmit | null;
   intel: Record<string, { hand: CardKey[]; bid: BidSubmit | null }>;  // 情報収集スパイで見える内容
 }

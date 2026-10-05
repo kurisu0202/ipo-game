@@ -4,7 +4,7 @@ import { viewFor } from '../src/logic/view';
 import { projectCheck } from '../src/logic/calc';
 import type { ActiveProject, BidSubmit, Company, Engineer, Game, Project } from '../src/logic/types';
 
-const two = () => createGame([{ id: 'a', name: 'A社' }, { id: 'b', name: 'B社' }], 12345);
+const two = () => createGame([{ id: 'a', name: 'A社' }, { id: 'b', name: 'B社' }], 12345, 'local', 12, false);
 const co = (g: Game, id: string) => g.companies.find(c => c.id === id)!;
 const eng = (id: string, skills: Engineer['skills'], extra: Partial<Engineer> = {}): Engineer => ({ id, name: id, skills, salary: 50, assign: null, restQ: -99, ...extra });
 const proj = (id: string, budget: number, reqs: Project['reqs'] = { BE: 1 }): Project => ({ id, type: 'speed', name: id, duration: 1, budget, reqs, tags: [], pay: 'lump' });
@@ -76,7 +76,7 @@ describe('作戦カードと防御', () => {
     expect(co(g, 'a').hand).toEqual(['D6']);
   });
   it('2回以上妨害を受けた会社は同情票で評判+1', () => {
-    const g = createGame([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }, { id: 'c', name: 'C' }], 7);
+    const g = createGame([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }, { id: 'c', name: 'C' }], 7, 'local', 12, false);
     cleanHands(g);
     co(g, 'a').hand = ['A7']; co(g, 'b').hand = ['A7'];
     bidOnly(g, { a: { card: 'A7', target: 'c' }, b: { card: 'A7', target: 'c' } });
@@ -188,7 +188,7 @@ describe('秘密情報', () => {
 describe('決定論', () => {
   it('同じシードと提出なら同じ結果になる', () => {
     const run = () => {
-      const g = createGame([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }, { id: 'c', name: 'C' }], 999);
+      const g = createGame([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }, { id: 'c', name: 'C' }], 999, 'local', 12, false);
       for (let i = 0; i < 24 && g.phase !== 'end'; i++) {
         g.companies.forEach(c => {
           if (g.phase === 'bid') submit(g, c.id, { ...emptyBid(), bids: Object.fromEntries(g.market.slice(0, 2).map(p => [p.id, 80])) });
@@ -248,5 +248,68 @@ describe('経験値', () => {
     expect(e1.xp?.FE).toBeUndefined();   // 案件に必要ないスキルは育たない
     expect(e1.salary).toBe(55);
     expect(a.engineers.find(e => e.id === 'e2')!.xp).toBeUndefined();   // 担当していない社員は育たない
+  });
+});
+
+describe('業種', () => {
+  const four = () => createGame(['a', 'b', 'c', 'd'].map(id => ({ id, name: id })), 4242);
+  it('ゲーム開始時は業種選び。各社に違う2つが配られ、他社の候補は見えない', () => {
+    const g = four();
+    expect(g.phase).toBe('pick');
+    g.companies.forEach(c => { expect(c.choices).toHaveLength(2); expect(new Set(c.choices).size).toBe(2); });
+    // 3社目までは重ならない（6種類を順に配る）
+    expect(new Set(g.companies.slice(0, 3).flatMap(c => c.choices!)).size).toBe(6);
+    const v = viewFor(g, 'a');
+    expect(v.game.companies.find(c => c.id === 'a')!.choices).toHaveLength(2);
+    expect(v.game.companies.find(c => c.id === 'b')!.choices).toBeUndefined();
+  });
+  it('配られていない業種は選べない。全員そろうと決定して1期目の入札へ', () => {
+    const g = four();
+    const a = co(g, 'a');
+    const other = (['sier', 'web', 'saas', 'ai', 'maint', 'consul'] as const).find(k => !a.choices!.includes(k))!;
+    expect(() => submit(g, 'a', { industry: other })).toThrow('配られた業種');
+    g.companies.forEach(c => submit(g, c.id, { industry: c.choices![0] }));
+    expect(tryResolve(g)).toBe(true);
+    expect(g.phase).toBe('bid');
+    expect(g.q).toBe(0);
+    expect(g.reveal?.kind).toBe('pick');
+    g.companies.forEach(c => { expect(c.industry).toBeTruthy(); expect(c.choices).toBeUndefined(); });
+  });
+  it('コンサルはスパイ指令+1で始まる', () => {
+    const g = four();
+    const a = co(g, 'a');
+    a.choices = ['consul', 'web'];
+    const rep = a.rep, orders = a.spyOrdersLeft;
+    g.companies.forEach(c => submit(g, c.id, { industry: c.choices![0] }));
+    tryResolve(g);
+    expect(a.rep).toBe(rep);
+    expect(a.spyOrdersLeft).toBe(orders + 1);
+  });
+  it('SIerは大型システムで比較−10%、運用保守は炎上火消しに入札できない', () => {
+    const g2 = two(); cleanHands(g2);
+    co(g2, 'a').industry = 'sier';
+    g2.market = [{ ...proj('p1', 1000), type: 'big' }];
+    bidOnly(g2, { a: { bids: { p1: 90 } }, b: { bids: { p1: 80 } } });   // 900×0.9=810 > 800 → b
+    expect(co(g2, 'b').projects[0]?.id).toBe('p1');
+    const g3 = two(); cleanHands(g3);
+    co(g3, 'a').industry = 'sier';
+    g3.market = [{ ...proj('p1', 1000), type: 'big' }];
+    bidOnly(g3, { a: { bids: { p1: 90 } }, b: { bids: { p1: 90 } } });   // 810 < 900 → SIer が同率でも勝つ
+    expect(co(g3, 'a').projects[0]?.id).toBe('p1');
+    const g4 = two(); cleanHands(g4);
+    co(g4, 'a').industry = 'maint';
+    g4.market = [{ ...proj('p1', 1000), type: 'fire' }];
+    g4.companies.forEach(c => submit(g4, c.id, { ...emptyBid(), bids: { p1: 100 } } as BidSubmit));
+    expect(g4.bidSubs.a.bids).toEqual({});
+    expect(g4.bidSubs.b.bids).toEqual({ p1: 100 });
+  });
+  it('SaaSは案件の受け取り×0.9', () => {
+    const g = two(); cleanHands(g);
+    g.q = 0; g.phase = 'dev';
+    const a = co(g, 'a'), b = co(g, 'b');
+    a.industry = 'saas';
+    for (const c of [a, b]) { c.engineers = [eng(`${c.id}1`, { BE: 2 }, { assign: `${c.id}p` })]; c.projects = [active(`${c.id}p`, 1000, { BE: 1 })]; c.cash = 0; }
+    devOnly(g);
+    expect(b.cash - a.cash).toBe(100);   // 1000 と 900（給料は同じ）
   });
 });

@@ -3,20 +3,21 @@
 //  すべての乱数は g.seed から作るので、同じ入力なら同じ結果になる
 // =====================================================================
 import {
-  ABANDON, ACCUSE, GROWTH, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
+  ABANDON, ACCUSE, GROWTH, INDUSTRIES, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
   EMPLOYEE_EVENT, ENGINEER, FIRE_DEBT, FIRST_NAMES, GAME, HACKATHON, HAPPENINGS, HAPPENING_FX, HIRE_FEES, INCIDENT,
   INTERIM, INTEREST, INVESTIGATE_COST, LAST_NAMES, LATE_PENALTY, MUST_SHARE, PROJECT_TYPES, REMOTE_SALARY, RENTAL, REPEAT_BONUS,
-  REP_DISCOUNT, RUSH_DEBT, SECRET_MULTS, SERVICE, SEVERANCE_QUARTERS, SKILLS, SKILL_NAME, SPY_STEAL,
+  REP_DISCOUNT, SECRET_MULTS, SERVICE, SEVERANCE_QUARTERS, SKILLS, SKILL_NAME, SPY_STEAL,
   STOCK_CHANCE, STOCK_VALUES, TAGS, TAG_CHANCE, TROLL,
   xpNeed,
 } from './config';
 import {
   assignees, checkReqs, companyOf, effSkills, payroll, quarterLabel, round10, season, servicePower, serviceNeed,
   signedYen, skillSum, sumSkills, totalQ, totalYears, working, yen,
+  bidFactor, canBid, hireBonus, launchCost, payFactor, rushDebt, salaryMult, serviceIncome,
 } from './calc';
 import { chance, int, pick, shuffle, weighted } from './rng';
 import type {
-  ActiveProject, BidPct, BidSubmit, CardKey, Company, DevSubmit, Engineer, FinalRow, Game, HappeningKey, HireFee,
+  ActiveProject, BidPct, BidSubmit, IndustryKey, PickSubmit, CardKey, Company, DevSubmit, Engineer, FinalRow, Game, HappeningKey, HireFee,
   Project, ProjectType, RevealBlock, RevealLine, Skill, Skills, SpyOrder, Tag,
 } from './types';
 
@@ -126,7 +127,7 @@ function drawCard(g: Game, c: Company) {
 // ---------------------------------------------------------------------
 //  ゲーム作成・期の開始
 // ---------------------------------------------------------------------
-export function createGame(players: { id: string; name: string }[], seed: number, id = 'local', quarters: number = GAME.quarters): Game {
+export function createGame(players: { id: string; name: string }[], seed: number, id = 'local', quarters: number = GAME.quarters, industries = true): Game {
   if (!(GAME.modes as readonly number[]).includes(quarters)) quarters = GAME.quarters;
   if (players.length < GAME.minPlayers || players.length > GAME.maxPlayers) throw new Error(`参加は${GAME.minPlayers}〜${GAME.maxPlayers}社です`);
   const g: Game = {
@@ -153,8 +154,50 @@ export function createGame(players: { id: string; name: string }[], seed: number
   }
   for (let i = 0; i < GAME.startHand; i++) g.companies.forEach(c => drawCard(g, c));
   log(g, `ゲーム開始！ 参加：${g.companies.map(c => c.name).join('・')}`);
-  startQuarter(g);
+  if (industries) dealIndustries(g);
+  else startQuarter(g);
   return g;
+}
+
+/** 業種を2つずつ配る（なるべく他社と重ならないように。足りないときは山を作り直す） */
+function dealIndustries(g: Game) {
+  const keys = Object.keys(INDUSTRIES) as IndustryKey[];
+  let pile: IndustryKey[] = [];
+  for (const c of g.companies) {
+    const hand: IndustryKey[] = [];
+    while (hand.length < 2) {
+      if (!pile.length) pile = shuffle(g, [...keys]);
+      const k = pile.pop()!;
+      if (!hand.includes(k)) hand.push(k);
+    }
+    c.choices = hand;
+  }
+  g.phase = 'pick';
+  g.pickSubs = {};
+}
+
+/** 業種の決定と、開始時の効果 */
+function resolvePick(g: Game) {
+  const blocks: RevealBlock[] = [];
+  for (const c of g.companies) {
+    const k = g.pickSubs![c.id].industry;
+    const s = INDUSTRIES[k];
+    c.industry = k;
+    delete c.choices;
+    if (s.spyBonus) c.spyOrdersLeft += s.spyBonus;
+    if (s.startRep) c.rep += s.startRep;
+    for (let i = 0; i < (s.fewerStaff || 0) && c.engineers.length > 1; i++) c.engineers.pop();
+    blocks.push({
+      kind: 'info', icon: s.icon, title: c.name, owner: c.id,
+      lines: [{ text: `作戦：${s.plan}`, tone: 'muted' }, ...s.good.map(t => ({ text: `◎ ${t}`, tone: 'good' as const })), ...s.bad.map(t => ({ text: `△ ${t}`, tone: 'bad' as const }))],
+      stamp: { type: 'info', text: s.name, tone: 'gold' },
+    });
+    log(g, `${c.name}：業種は「${s.name}」`);
+  }
+  g.pickSubs = {};
+  g.reveal = { kind: 'pick', q: -1, title: '各社の業種が決定！', blocks, headlines: g.companies.map(c => `${c.name}、${INDUSTRIES[c.industry!].name}として創業`) };
+  g.revealSeq++;
+  startQuarter(g);
 }
 
 export const currentHappening = (g: Game) => g.happenings[g.q];
@@ -252,7 +295,7 @@ export function pendingSpies(g: Game, cid: string) {
 function cleanBid(g: Game, cid: string, s: BidSubmit): BidSubmit {
   const c = companyOf(g, cid)!;
   const out: BidSubmit = { bids: {}, hires: {}, spyOrders: {} };
-  for (const [pid, v] of Object.entries(s.bids || {})) if (g.market.some(p => p.id === pid) && (BID_PCTS as readonly number[]).includes(v)) out.bids[pid] = v as BidPct;
+  for (const [pid, v] of Object.entries(s.bids || {})) if (g.market.some(p => p.id === pid && canBid(c, p.type)) && (BID_PCTS as readonly number[]).includes(v)) out.bids[pid] = v as BidPct;
   for (const [eid, v] of Object.entries(s.hires || {})) if (g.pool.some(e => e.id === eid) && (HIRE_FEES as readonly number[]).includes(v)) out.hires[eid] = v as HireFee;
   if (s.card && c.hand.includes(s.card) && CARDS[s.card].kind !== 'defense') {
     if (CARDS[s.card].kind === 'self') out.card = s.card;
@@ -296,24 +339,31 @@ function cleanDev(g: Game, cid: string, s: DevSubmit): DevSubmit {
   return out;
 }
 
-export function submit(g: Game, cid: string, data: BidSubmit | DevSubmit) {
+export function submit(g: Game, cid: string, data: BidSubmit | DevSubmit | PickSubmit) {
   if (g.phase === 'end') throw new Error('ゲームは終了しています');
   if (!companyOf(g, cid)) throw new Error('参加していない会社です');
-  if (g.phase === 'bid') g.bidSubs[cid] = cleanBid(g, cid, data as BidSubmit);
+  if (g.phase === 'pick') {
+    const k = (data as PickSubmit).industry;
+    if (!companyOf(g, cid)!.choices?.includes(k)) throw new Error('配られた業種から選んでください');
+    g.pickSubs![cid] = { industry: k };
+  } else if (g.phase === 'bid') g.bidSubs[cid] = cleanBid(g, cid, data as BidSubmit);
   else g.devSubs[cid] = cleanDev(g, cid, data as DevSubmit);
 }
 
 export function cancelSubmit(g: Game, cid: string) {
-  if (g.phase === 'bid') delete g.bidSubs[cid];
+  if (g.phase === 'pick') delete g.pickSubs?.[cid];
+  else if (g.phase === 'bid') delete g.bidSubs[cid];
   else delete g.devSubs[cid];
 }
 
-export const allSubmitted = (g: Game) => g.companies.every(c => (g.phase === 'bid' ? g.bidSubs[c.id] : g.devSubs[c.id]));
+export const subsOf = (g: Game): Record<string, unknown> => (g.phase === 'pick' ? g.pickSubs || {} : g.phase === 'bid' ? g.bidSubs : g.devSubs);
+export const allSubmitted = (g: Game) => g.companies.every(c => subsOf(g)[c.id]);
 
 /** 全員そろっていれば解決する。解決したら true */
 export function tryResolve(g: Game): boolean {
   if (g.phase === 'end' || !allSubmitted(g)) return false;
-  if (g.phase === 'bid') resolveBid(g);
+  if (g.phase === 'pick') resolvePick(g);
+  else if (g.phase === 'bid') resolveBid(g);
   else resolveDev(g);
   return true;
 }
@@ -509,7 +559,7 @@ export function resolveBid(g: Game) {
       if (!pct) return;
       const banned = c.effects.noBid === q;
       const amount = bidAmount(p.budget, pct, c.effects.dump === q);
-      entries.push({ c, amount, cmp: amount * (1 - REP_DISCOUNT * c.rep), banned });
+      entries.push({ c, amount, cmp: amount * (1 - REP_DISCOUNT * c.rep) * bidFactor(c, p.type), banned });
     });
     const valid = entries.filter(x => !x.banned);
     const spec = PROJECT_TYPES[p.type];
@@ -540,7 +590,7 @@ export function resolveBid(g: Game) {
 
   // 6. 採用
   for (const e of g.pool) {
-    const entries = g.companies.filter(c => subs[c.id].hires[e.id] !== undefined).map(c => ({ c, fee: subs[c.id].hires[e.id], banned: c.effects.noHire === q }));
+    const entries = g.companies.filter(c => subs[c.id].hires[e.id] !== undefined).map(c => ({ c, fee: subs[c.id].hires[e.id], cmp: subs[c.id].hires[e.id] + hireBonus(c, e), banned: c.effects.noHire === q }));
     const valid = entries.filter(x => !x.banned);
     const flips = [...entries].sort((a, b) => (a.banned ? -1 : 0) - (b.banned ? -1 : 0) || a.fee - b.fee).map(x => ({ label: x.c.name, value: x.banned ? '採用禁止' : `${x.fee}万円` }));
     const kind = e.legend ? '🧙 伝説のエンジニア' : e.rookie ? '🌱 新人' : '👤';
@@ -549,8 +599,8 @@ export function resolveBid(g: Game) {
       blocks.push({ kind: 'hire', icon: '👤', title: e.name, lines: [head], flips, stamp: { type: 'none', text: '採用なし', tone: 'muted' } });
       continue;
     }
-    const maxFee = Math.max(...valid.map(x => x.fee));
-    let tied = valid.filter(x => x.fee === maxFee);
+    const maxFee = Math.max(...valid.map(x => x.cmp));
+    let tied = valid.filter(x => x.cmp === maxFee);
     const maxRep = Math.max(...tied.map(x => x.c.rep));
     tied = tied.filter(x => x.c.rep === maxRep);
     const win = pick(g, tied);
@@ -665,9 +715,9 @@ export function resolveDev(g: Game) {
     }
     // 7. サービス立ち上げ
     if (s.launch && !c.service) {
-      c.cash -= SERVICE.launchCost;
+      c.cash -= launchCost(c);
       c.service = { level: 0 };
-      L(c, `自社サービスを立ち上げ −${SERVICE.launchCost}`, 'gold');
+      L(c, `自社サービスを立ち上げ −${launchCost(c)}`, 'gold');
       headlines.push(`${c.name}、自社サービスを立ち上げ`);
     }
     // 8. 担当と突貫
@@ -690,7 +740,7 @@ export function resolveDev(g: Game) {
       if (!stopped) {
         if (chk.ok) {
           steps = p.rush ? 2 : 1;
-          if (p.rush) { c.debt += RUSH_DEBT; c.stats.rushes++; }
+          if (p.rush) { c.debt += rushDebt(c); c.stats.rushes++; }
           if (p.tags.includes('muri')) c.debt += 1;
           p.progress = Math.min(p.work, p.progress + steps);
           L(c, `「${p.name}」進捗 ${p.progress}/${p.work}${p.rush ? '（突貫・負債+2）' : ''}`);
@@ -726,7 +776,7 @@ export function resolveDev(g: Game) {
         L(c, `自社サービスが Lv${c.service.level} に成長！`, 'gold');
         if (c.service.level >= 4) headlines.push(`${c.name}のサービス、Lv${c.service.level}の人気に`);
       }
-      let inc = SERVICE.income[c.service.level];
+      let inc = serviceIncome(c, c.service.level);
       if (c.effects.review === q) inc = Math.floor(inc / 2);
       if (inc) { c.cash += inc; L(c, `サービス収入 +${inc}${c.effects.review === q ? '（口コミ被害で半減）' : ''}`, 'good'); }
     }
@@ -750,7 +800,7 @@ export function resolveDev(g: Game) {
     c.trolls = c.trolls.filter(t => t.left > 0);
 
     // 16. 給料
-    let salary = payroll(g, c).reduce((t, e) => t + e.salary, 0);
+    let salary = round10(payroll(g, c).reduce((t, e) => t + e.salary, 0) * salaryMult(c));
     if (h === 'H9') salary = Math.round(salary * REMOTE_SALARY);
     c.cash -= salary;
     L(c, `給料 −${salary}${h === 'H9' ? '（リモートで×0.7）' : ''}`);
@@ -877,7 +927,8 @@ export function resolveDev(g: Game) {
 }
 
 /** 支払いから取り分・持ち出しを引いて入金する。実際の入金額を返す */
-function payout(g: Game, c: Company, _p: ActiveProject, team: Engineer[], gross: number, ledgers: Record<string, Ledger>) {
+function payout(g: Game, c: Company, p: ActiveProject, team: Engineer[], gross: number, ledgers: Record<string, Ledger>) {
+  gross = round10(gross * payFactor(c, p.type));   // 業種による受け取り倍率
   let net = gross;
   for (const e of team) {
     if (e.loan) {
@@ -916,7 +967,8 @@ function completeProject(g: Game, c: Company, p: ActiveProject, team: Engineer[]
       if (de >= (p.reqs.DE || 0) + DESIGN_BONUS.extra) { v *= DESIGN_BONUS.mult; notes.push('デザイン満足×1.3'); }
     }
     if (p.type === 'secret') {
-      const m = pick(g, SECRET_MULTS);
+      let m = pick(g, SECRET_MULTS);
+      if (c.industry && INDUSTRIES[c.industry].secretUp) m = SECRET_MULTS[Math.min(SECRET_MULTS.length - 1, SECRET_MULTS.indexOf(m) + 1)];
       g.secretMult[p.id] = m;
       v *= m;
       notes.push(`極秘倍率×${m}`);

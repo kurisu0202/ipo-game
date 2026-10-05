@@ -526,3 +526,9 @@ details.fold.secret > summary { color: var(--down); }
 .badge-k.place.proj { background: var(--blue-bg); color: var(--blue); }
 .badge-k.place.svc { background: var(--gold-bg); color: var(--gold); }
 .badge-k.place.free { background: var(--up-bg); color: var(--up); }
+.tag.good { background: var(--up-bg); color: var(--up); }
+.chip.ind { background: var(--blue-bg); color: var(--blue); border-color: transparent; vertical-align: middle; }
+.ind-card { width: 100%; text-align: left; display: block; }
+.ind-card .ind-icon { font-size: 34px; line-height: 1; }
+.ind-card .ind-name { font-size: 17px; font-weight: 900; }
+.ind-list { margin: 10px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; font-weight: 700; }

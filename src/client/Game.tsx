@@ -1,12 +1,13 @@
 // ===== ゲーム画面 =====
 import { useEffect, useMemo, useState } from 'react';
 import { CARDS, GAME, HAPPENINGS, PROJECT_TYPES, SEASONS, SERVICE } from '../logic/config';
-import { payroll, projectCheck, quarterLabel, season, totalQ, totalYears, working, yen } from '../logic/calc';
+import { payroll, projectCheck, quarterLabel, salaryMult, season, serviceIncome, totalQ, totalYears, working, yen } from '../logic/calc';
 import { defaultDev, emptyBid } from '../logic/game';
 import type { ActiveProject, BidSubmit, Company, DevSubmit, Engineer, Game as G } from '../logic/types';
 import type { PlayerView } from '../logic/view';
 import { phaseKey, type ChatMsg } from '../shared/protocol';
 import { BidTab, CardDetail, CardTile } from './BidTab';
+import { IndustryChip, IndustryDetail } from './Industry';
 import { DevTab, EngBadges, ProjectSkillSheet, XpLine, devSummary } from './DevTab';
 import { sfx, setSound, soundOn } from './fx/sound';
 import type { Snapshot } from './session';
@@ -36,7 +37,7 @@ export function GameScreen({ snap, onSubmit, onCancel, onExit, onAgain, onChat, 
 
   // 提出前の下書き（リロードしても残す）
   const initial = (): BidSubmit | DevSubmit => {
-    if (v.mySubmit) return v.mySubmit;
+    if (v.mySubmit) return v.mySubmit as BidSubmit | DevSubmit;
     try { const s = sessionStorage.getItem(draftKey(g, snap.me)); if (s) return JSON.parse(s); } catch { /* 無視 */ }
     return g.phase === 'bid' ? emptyBid() : defaultDev(g, snap.me);
   };
@@ -169,18 +170,19 @@ function MeTab({ v, me }: { v: PlayerView; me: Company }) {
   const sortedStaff = [...me.engineers].sort((a, b) => order[placeOf(a).kind] - order[placeOf(b).kind]);
   const staff = { proj: 0, svc: 0, free: 0, rest: me.engineers.filter(e => !working(g, e)).length };
   me.engineers.forEach(e => { staff[placeOf(e).kind]++; });
-  const pay = payroll(g, me).reduce((t, e) => t + e.salary, 0);
+  const pay = Math.round(payroll(g, me).reduce((t, e) => t + e.salary, 0) * salaryMult(me) / 10) * 10;
   return (
     <div className="content">
-      <div className="row" style={{ margin: '12px 2px' }}><LogoMark g={g} id={me.id} name={me.name} /><div className="grow"><b style={{ fontSize: 18 }}>{me.name}</b><div className="note">完了した案件 {me.completed}件</div></div></div>
+      <div className="row" style={{ margin: '12px 2px' }}><LogoMark g={g} id={me.id} name={me.name} /><div className="grow"><b style={{ fontSize: 18 }}>{me.name}</b> <IndustryChip c={me} full /><div className="note">完了した案件 {me.completed}件</div></div></div>
+      {me.industry && <details className="fold" style={{ marginBottom: 10 }}><summary>業種の得意・弱点</summary><div className="fold-body"><IndustryDetail k={me.industry} /></div></details>}
       <div className="kpis">
         <div className="kpi"><small>💴 現金</small><span className={`num ${me.cash < 0 ? 'down' : ''}`}>{me.cash.toLocaleString()}<small>万円</small></span></div>
         <div className="kpi"><small>⭐ 評判</small><span className="num">{me.rep}</span><div className="note">入札の比較で{Math.abs(me.rep * 3)}%{me.rep >= 0 ? '有利' : '不利'}</div></div>
         <div className="kpi"><small>🧾 負債</small><span className={`num ${me.debt >= 6 ? 'down' : me.debt >= 4 ? 'gold' : ''}`}>{me.debt}</span><div className="note">{me.debt >= 6 ? '本番障害が起きる！' : '6以上で本番障害'}</div></div>
-        <div className="kpi"><small>🚀 サービス</small><span className="num">{me.service ? `Lv${me.service.level}` : 'なし'}</span><div className="note">{me.service ? `毎期${SERVICE.income[me.service.level]}・価値${me.service.level * SERVICE.valuePerLv}` : '開発タブで立ち上げ'}</div></div>
+        <div className="kpi"><small>🚀 サービス</small><span className="num">{me.service ? `Lv${me.service.level}` : 'なし'}</span><div className="note">{me.service ? `毎期${serviceIncome(me, me.service.level)}・価値${me.service.level * SERVICE.valuePerLv}` : '開発タブで立ち上げ'}</div></div>
       </div>
       <div className="card" style={{ marginTop: 10 }}><div className="row"><b>現金の推移</b><span className="grow" /><span className="note">開始 {GAME.startCash}</span></div><Sparkline values={me.history} color={companyColor(g, me.id)} /></div>
-      <div className="sec-title">👥 社員 <span className="n">{me.engineers.length}</span><small>給料の合計 {pay}万円/期（貸し出し中を含む）</small></div>
+      <div className="sec-title">👥 社員 <span className="n">{me.engineers.length}</span><small>給料の合計 {pay}万円/期（貸し出し中を含む{salaryMult(me) !== 1 ? `・業種で×${salaryMult(me)}` : ''}）</small></div>
       <div className="chips" style={{ margin: '0 2px 8px' }}>
         <span className="chip blue">🛠️ 案件 {staff.proj}人</span>
         {me.service && <span className="chip gold">🚀 サービス {staff.svc}人</span>}
@@ -223,7 +225,7 @@ function RivalsTab({ v, me }: { v: PlayerView; me: string }) {
           <div className="rival">
             <span className="rk" style={{ color: i === 0 ? 'var(--gold)' : 'var(--faint)' }}>{i + 1}</span>
             <LogoMark g={g} id={c.id} name={c.name} />
-            <div className="grow"><b>{c.name}</b>{c.id === me && <span className="chip ink" style={{ marginLeft: 6 }}>あなた</span>}
+            <div className="grow"><b>{c.name}</b>{c.id === me && <span className="chip ink" style={{ marginLeft: 6 }}>あなた</span>} <IndustryChip c={c} />
               <div className="note">{v.submitted[c.id] ? '✓ 提出済み' : '考え中…'}</div></div>
             <span className={`num ${c.cash < 0 ? 'down' : ''}`} style={{ fontSize: 20 }}>{yen(c.cash)}</span>
           </div>

@@ -139,7 +139,7 @@ export function Reveal({ data, me, onClose, closeLabel }: { data: RevealData; me
       {mode !== 'count' && (
         <div className="reveal-in">
           <div className="reveal-title">{data.title}</div>
-          <div className="reveal-sub">{data.kind === 'bid' ? '作戦カード → 同情票 → レンタル → 落札 → 採用' : data.kind === 'dev' ? '各社の決算とイベント' : '現金・サービス・株を合計して順位を決定'}</div>
+          <div className="reveal-sub">{data.kind === 'pick' ? '各社の業種と、得意・弱点' : data.kind === 'bid' ? '作戦カード → 同情票 → レンタル → 落札 → 採用' : data.kind === 'dev' ? '各社の決算とイベント' : '現金・サービス・株を合計して順位を決定'}</div>
           {data.headlines.length > 0 && (
             <div className="headline"><div className="hh">NEWS 速報</div>{data.headlines.slice(0, 4).map((h, i) => <div key={i}>{h}</div>)}</div>
           )}

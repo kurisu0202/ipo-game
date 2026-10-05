@@ -1,8 +1,8 @@
 // ===== セッション：ローカル（ホットシート）とオンラインを同じ形で扱う =====
 import { useSyncExternalStore } from 'react';
-import { cancelSubmit, createGame, submit as doSubmit, tryResolve } from '../logic/game';
+import { cancelSubmit, createGame, submit as doSubmit, subsOf, tryResolve } from '../logic/game';
 import { viewFor, type PlayerView } from '../logic/view';
-import type { BidSubmit, DevSubmit, Game } from '../logic/types';
+import type { BidSubmit, DevSubmit, Game, PickSubmit } from '../logic/types';
 import { addChat, backToLobby, cancelMove, joinRoom, lobbyInfo, phaseKey, startGame, submitMove, type ChatMsg, type LobbyInfo, type RoomData } from '../shared/protocol';
 import { announce, transact, watchPresence, watchRoom } from './store';
 
@@ -21,7 +21,7 @@ export interface Snapshot {
 export interface Session {
   get(): Snapshot;
   subscribe(fn: () => void): () => void;
-  submit(data: BidSubmit | DevSubmit): void;
+  submit(data: BidSubmit | DevSubmit | PickSubmit): void;
   cancel(): void;
   start(quarters?: number): void;
   again(): void;
@@ -39,7 +39,7 @@ abstract class Base implements Session {
   get = () => this.snap;
   subscribe = (fn: () => void) => { this.subs.add(fn); return () => { this.subs.delete(fn); }; };
   protected set(p: Partial<Snapshot>) { this.snap = { ...this.snap, ...p }; this.subs.forEach(f => f()); }
-  abstract submit(data: BidSubmit | DevSubmit): void;
+  abstract submit(data: BidSubmit | DevSubmit | PickSubmit): void;
   abstract cancel(): void;
   abstract start(quarters?: number): void;
   abstract again(): void;
@@ -73,7 +73,7 @@ export class LocalSession extends Base {
   private current(): string {
     const g = this.g;
     if (g.phase === 'end') return g.companies[0].id;
-    const done = g.phase === 'bid' ? g.bidSubs : g.devSubs;
+    const done = subsOf(g);
     return (g.companies.find(c => !done[c.id]) || g.companies[0]).id;
   }
   private refresh(stage: Snapshot['stage']) {
@@ -81,7 +81,7 @@ export class LocalSession extends Base {
     try { localStorage.setItem(LOCAL_KEY, JSON.stringify(this.g)); } catch { /* 容量不足 */ }
     this.set({ me, stage: this.g.phase === 'end' ? 'play' : stage, view: viewFor(this.g, me), lobby: null });
   }
-  submit(data: BidSubmit | DevSubmit) {
+  submit(data: BidSubmit | DevSubmit | PickSubmit) {
     doSubmit(this.g, this.snap.me, data);
     tryResolve(this.g);
     this.refresh('pass');
@@ -147,7 +147,7 @@ export class OnlineSession extends Base {
     if (!me) { this.fail('入室中です。少し待ってください'); return; }
     void transact(this.room, d => fn(d, me)).then(r => { if (r.error) this.fail(r.error); });
   }
-  submit(data: BidSubmit | DevSubmit) {
+  submit(data: BidSubmit | DevSubmit | PickSubmit) {
     const g = this.snap.view?.game;
     if (!g) return;
     const pk = phaseKey(g.q, g.phase);

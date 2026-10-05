@@ -1,7 +1,7 @@
 // ===== 開発タブ =====
 import { useState } from 'react';
 import { ABANDON, GROWTH, INVESTIGATE_COST, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS, xpNeed } from '../logic/config';
-import { assignees, effSkills, projectCheck, quarterLabel, servicePower, skillSum, sumSkills, working } from '../logic/calc';
+import { assignees, effSkills, launchCost, projectCheck, quarterLabel, rushDebt, serviceIncome, servicePower, skillSum, sumSkills, working } from '../logic/calc';
 import { abandonFee, pendingSpies } from '../logic/game';
 import type { ActiveProject, Company, DevSubmit, Engineer, Game, Skill, SpyOrder } from '../logic/types';
 import type { PlayerView } from '../logic/view';
@@ -259,7 +259,7 @@ function ProjectDevCard({ g, me, p, assign, rush, locked, onOpen, onFill, onRemo
       )}
       <button className={`rush ${rush ? 'on' : ''}`} disabled={locked} onClick={onRush}>
         <span className="check" />
-        <span className="grow">🏃 突貫工事<div className="note" style={{ fontWeight: 500 }}>進捗+2になるかわりに負債+2（スキルを満たしたときだけ）</div></span>
+        <span className="grow">🏃 突貫工事<div className="note" style={{ fontWeight: 500 }}>進捗+2になるかわりに負債+{rushDebt(me)}（スキルを満たしたときだけ）</div></span>
       </button>
       {!locked && <button className="link-btn" onClick={onDrop}>🗑️ この案件を途中放棄する（違約金 {abandonFee(p).toLocaleString()}・評判{ABANDON.rep}）</button>}
     </div>
@@ -273,8 +273,8 @@ function ServiceCard({ g, me, draft, assign, locked, onOpen, onRemove, onLaunch 
     return (
       <div className="card">
         <b>まだ自社サービスがありません</b>
-        <p className="note" style={{ margin: '6px 0 10px' }}>{SERVICE.launchCost}万円で立ち上げ。担当社員のスキル合計が「3＋Lv」以上だとLvが1上がり、毎期の収入が増えます（Lv1:60 → Lv5:460）。最終決算ではLv×{SERVICE.valuePerLv}万円の価値。</p>
-        <button className="btn gold big" disabled={locked} onClick={onLaunch}>🚀 {SERVICE.launchCost}万円で立ち上げる</button>
+        <p className="note" style={{ margin: '6px 0 10px' }}>{launchCost(me)}万円で立ち上げ。担当社員のスキル合計が「3＋Lv」以上だとLvが1上がり、毎期の収入が増えます（Lv1:{serviceIncome(me, 1)} → Lv5:{serviceIncome(me, 5)}）。最終決算ではLv×{SERVICE.valuePerLv}万円の価値。</p>
+        <button className="btn gold big" disabled={locked} onClick={onLaunch}>🚀 {launchCost(me)}万円で立ち上げる</button>
       </div>
     );
   }
@@ -286,7 +286,7 @@ function ServiceCard({ g, me, draft, assign, locked, onOpen, onRemove, onLaunch 
     <div className="card">
       <div className="row">
         <div className="grow"><b>{draft.launch ? '🚀 今期立ち上げ予定' : `自社サービス Lv${lv}`}</b>
-          <div className="note">収入 {SERVICE.income[lv]}万円/期{me.effects.review === g.q ? '（口コミ被害で今期は半分）' : ''}・価値 {lv * SERVICE.valuePerLv}万円</div></div>
+          <div className="note">収入 {serviceIncome(me, lv)}万円/期{me.effects.review === g.q ? '（口コミ被害で今期は半分）' : ''}・価値 {lv * SERVICE.valuePerLv}万円</div></div>
         {draft.launch && !locked && <button className="btn xs" onClick={onLaunch}>取りやめ</button>}
       </div>
       <div className="row" style={{ gap: 4, margin: '10px 0' }}>

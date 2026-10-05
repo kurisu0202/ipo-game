@@ -202,7 +202,7 @@ export function PassScreen({ g, cid, onOpen }: { g: Game; cid: string; onOpen: (
       <div className="hand-icon">🤲</div>
       <div style={{ fontWeight: 700 }}>端末を渡してください</div>
       <div className="who">{c.name}<br /><span style={{ fontSize: 24 }}>の番です</span></div>
-      <div style={{ opacity: .85, fontSize: 13 }}>{g.phase === 'bid' ? '入札フェーズ' : '開発フェーズ'}・ほかの人は画面を見ないでね</div>
+      <div style={{ opacity: .85, fontSize: 13 }}>{g.phase === 'pick' ? '業種選び' : g.phase === 'bid' ? '入札フェーズ' : '開発フェーズ'}・ほかの人は画面を見ないでね</div>
       <button className="btn big" onClick={() => { unlockAudio(); sfx.tap(); onOpen(); }}>👀 見る</button>
     </div>
   );

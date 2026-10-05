@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addChat, backToLobby, cancelMove, effectiveHost, joinRoom, phaseKey, startGame, submitMove, type RoomData } from '../src/shared/protocol';
-import { smartBid, smartDev } from '../src/logic/bots';
-import type { BidSubmit, DevSubmit } from '../src/logic/types';
+import { pickIndustry, smartBid, smartDev } from '../src/logic/bots';
 
 // 毎回 JSON を通す（Firebase に文字列で保存するのと同じ）
 const save = (d: RoomData) => JSON.parse(JSON.stringify(d)) as RoomData;
@@ -41,7 +40,7 @@ describe('オンラインの部屋', () => {
       for (const c of d.game!.companies) {
         const g = d.game!;
         const pk = phaseKey(g.q, g.phase);
-        const data: BidSubmit | DevSubmit = g.phase === 'bid' ? smartBid(g, c.id, Math.random) : smartDev(g, c.id, Math.random);
+        const data = g.phase === 'pick' ? pickIndustry(g, c.id, Math.random) : g.phase === 'bid' ? smartBid(g, c.id, Math.random) : smartDev(g, c.id, Math.random);
         if (c.id === 'c1' && step === 0) { d = save(submitMove(d, c.id, data, pk)); d = save(cancelMove(d, c.id)); }
         d = save(submitMove(d, c.id, data, pk));
         max = Math.max(max, JSON.stringify(d).length);

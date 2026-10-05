@@ -5,6 +5,7 @@ import { Reveal } from './Reveal';
 import { Home, LocalSetup, Lobby, OnlineJoin, PassScreen, Splash } from './screens';
 import { LocalSession, OnlineSession, clearLocal, hasJoined, savedLocal, useSession, type Session } from './session';
 import { Toast } from './ui';
+import { PickScreen } from './Industry';
 
 type Screen = 'home' | 'local' | 'online' | 'game';
 
@@ -70,6 +71,8 @@ function Playing({ session, onExit }: { session: Session; onExit: () => void }) 
     body = <Lobby room={snap.room} lobby={snap.lobby} me={snap.me} connected={snap.connected} onStart={quarters => session.start(quarters)} onLeave={onExit} />;
   } else if (snap.stage === 'pass' && g.phase !== 'end') {
     body = <PassScreen g={g} cid={snap.me} onOpen={() => session.openTurn()} />;
+  } else if (g.phase === 'pick') {
+    body = <PickScreen key={`pick:${snap.me}`} snap={snap} onSubmit={d => session.submit(d)} onCancel={() => session.cancel()} onExit={onExit} />;
   } else {
     body = <GameScreen key={`${g.q}:${g.phase}:${snap.me}`} snap={snap} isHost={isHost} onSubmit={d => session.submit(d)} onCancel={() => session.cancel()}
       onExit={onExit} onAgain={() => session.again()} onChat={t => session.chat(t)} />;
@@ -78,7 +81,7 @@ function Playing({ session, onExit }: { session: Session; onExit: () => void }) 
     <>
       {body}
       {showReveal && <Reveal key={g!.revealSeq} data={g!.reveal!} me={snap.mode === 'online' ? snap.me : ''} onClose={markSeen}
-        closeLabel={g!.reveal!.kind === 'final' ? '最終結果を見る 🔔' : g!.phase === 'bid' ? '次の期へ ▶' : '開発フェーズへ ▶'} />}
+        closeLabel={g!.reveal!.kind === 'final' ? '最終結果を見る 🔔' : g!.reveal!.kind === 'pick' ? 'ゲーム開始 ▶' : g!.phase === 'bid' ? '次の期へ ▶' : '開発フェーズへ ▶'} />}
       {snap.mode === 'online' && !snap.connected && <Toast msg="📡 再接続中…" />}
       <Toast msg={snap.error} />
     </>

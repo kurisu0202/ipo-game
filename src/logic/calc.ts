@@ -1,6 +1,6 @@
 // ===== 計算ヘルパー（解決処理と画面の両方で使う） =====
-import { GAME, SERVICE, SKILLS } from './config';
-import type { ActiveProject, Company, Engineer, Game, Skill, Skills } from './types';
+import { GAME, INDUSTRIES, INDUSTRY_BID, INDUSTRY_HIRE_BONUS, RUSH_DEBT, SERVICE, SKILLS } from './config';
+import type { ActiveProject, Company, Engineer, Game, ProjectType, Skill, Skills } from './types';
 
 /** このゲームの全期数と年数 */
 export const totalQ = (g: { quarters?: number }) => g.quarters || GAME.quarters;
@@ -76,3 +76,24 @@ export const remaining = (p: ActiveProject) => Math.max(0, p.work - p.progress);
 export const quarterLabel = (q: number) => `${yearOf(q)}年目・${['春', '夏', '秋', '冬'][season(q)]}`;
 export const yen = (v: number) => `${v < 0 ? '−' : ''}${Math.abs(Math.round(v)).toLocaleString('ja-JP')}万円`;
 export const signedYen = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(Math.round(v)).toLocaleString('ja-JP')}万円`;
+
+// ---------- 業種の効果 ----------
+export const industryOf = (c: Pick<Company, 'industry'>) => (c.industry ? INDUSTRIES[c.industry] : undefined);
+/** 入札の比較値にかける倍率（得意 0.9・苦手 1.1） */
+export function bidFactor(c: Pick<Company, 'industry'>, t: ProjectType) {
+  const s = industryOf(c);
+  if (s?.bidGood?.includes(t)) return INDUSTRY_BID.good;
+  if (s?.bidBad?.includes(t)) return INDUSTRY_BID.bad;
+  return 1;
+}
+export const canBid = (c: Pick<Company, 'industry'>, t: ProjectType) => !industryOf(c)?.noBid?.includes(t);
+/** 案件の受け取りにかける倍率 */
+export function payFactor(c: Pick<Company, 'industry'>, t: ProjectType) {
+  const p = industryOf(c)?.pay;
+  return (p?.[t] ?? 1) * (p?.all ?? 1);
+}
+export const hireBonus = (c: Pick<Company, 'industry'>, e: Engineer) => (industryOf(c)?.hireSkills?.some(k => (e.skills[k] || 0) > 0) ? INDUSTRY_HIRE_BONUS : 0);
+export const launchCost = (c: Pick<Company, 'industry'>) => round10(SERVICE.launchCost * (industryOf(c)?.launchMult ?? 1));
+export const serviceIncome = (c: Pick<Company, 'industry'>, lv: number) => round10(SERVICE.income[lv] * (industryOf(c)?.serviceMult ?? 1));
+export const salaryMult = (c: Pick<Company, 'industry'>) => industryOf(c)?.salaryMult ?? 1;
+export const rushDebt = (c: Pick<Company, 'industry'>) => industryOf(c)?.rushDebt ?? RUSH_DEBT;

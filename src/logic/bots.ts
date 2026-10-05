@@ -2,7 +2,7 @@
 import { BID_PCTS, CARDS, HIRE_FEES, PROJECT_TYPES, SKILLS } from './config';
 import { companyOf, projectCheck, skillSum, sumSkills, checkReqs } from './calc';
 import { defaultDev, emptyBid, pendingSpies } from './game';
-import type { BidPct, BidSubmit, Company, DevSubmit, Game, HireFee, Skill, SpyOrder } from './types';
+import type { BidPct, BidSubmit, Company, DevSubmit, Game, HireFee, PickSubmit, Skill, SpyOrder } from './types';
 
 type R = () => number;
 const pick = <T>(r: R, a: readonly T[]) => a[Math.floor(r() * a.length)];
@@ -51,6 +51,12 @@ export function randomDev(g: Game, cid: string, r: R): DevSubmit {
 function capacity(g: Game, c: Company) {
   return sumSkills(g, c, c.engineers.filter(e => e.restQ !== g.q + 1));
 }
+/** 業種選び：配られた2つからランダム */
+export function pickIndustry(g: Game, cid: string, r: R): PickSubmit {
+  const c = companyOf(g, cid)!;
+  return { industry: pick(r, c.choices!) };
+}
+
 export function smartBid(g: Game, cid: string, r: R): BidSubmit {
   const c = companyOf(g, cid)!;
   const s = emptyBid();

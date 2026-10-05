@@ -4,7 +4,7 @@
 //  失敗するときは Error を投げる（トランザクションは中止される）。
 import { cancelSubmit, createGame, submit as doSubmit, tryResolve } from '../logic/game';
 import { GAME } from '../logic/config';
-import type { BidSubmit, DevSubmit, Game } from '../logic/types';
+import type { BidSubmit, DevSubmit, Game, PickSubmit } from '../logic/types';
 
 export const ROOM_RE = /^[A-Za-z0-9]{2,24}$/;
 export const NAME_MAX = 12;
@@ -73,7 +73,7 @@ export function startGame(cur: RoomData | null, cid: string, seed: number, quart
   return d;
 }
 
-export function submitMove(cur: RoomData | null, cid: string, data: BidSubmit | DevSubmit, pk: string): RoomData {
+export function submitMove(cur: RoomData | null, cid: string, data: BidSubmit | DevSubmit | PickSubmit, pk: string): RoomData {
   const d = need(cur, cid);
   const g = d.game;
   if (!g) throw new Error('ゲームが始まっていません');
