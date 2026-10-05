@@ -3,11 +3,12 @@
 //  すべての乱数は g.seed から作るので、同じ入力なら同じ結果になる
 // =====================================================================
 import {
-  ABANDON, ACCUSE, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
+  ABANDON, ACCUSE, GROWTH, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
   EMPLOYEE_EVENT, ENGINEER, FIRE_DEBT, FIRST_NAMES, GAME, HACKATHON, HAPPENINGS, HAPPENING_FX, HIRE_FEES, INCIDENT,
   INTERIM, INTEREST, INVESTIGATE_COST, LAST_NAMES, LATE_PENALTY, MUST_SHARE, PROJECT_TYPES, REMOTE_SALARY, RENTAL, REPEAT_BONUS,
   REP_DISCOUNT, RUSH_DEBT, SECRET_MULTS, SERVICE, SEVERANCE_QUARTERS, SKILLS, SKILL_NAME, SPY_STEAL,
   STOCK_CHANCE, STOCK_VALUES, TAGS, TAG_CHANCE, TROLL,
+  xpNeed,
 } from './config';
 import {
   assignees, checkReqs, companyOf, effSkills, payroll, quarterLabel, round10, season, servicePower, serviceNeed,
@@ -575,6 +576,23 @@ export function resolveBid(g: Game) {
 // ---------------------------------------------------------------------
 interface Ledger { lines: RevealLine[]; jackpot: boolean }
 
+/** 経験値：案件で使ったスキルが育つ。成長したら給料も上がる */
+function gainXp(c: Company, e: Engineer, reqs: Skills, ledgers: Record<string, Ledger>) {
+  for (const k of SKILLS) {
+    const lv = e.skills[k] || 0;
+    if (!reqs[k] || !lv || lv >= GROWTH.maxSkill) continue;
+    e.xp = e.xp || {};
+    e.xp[k] = (e.xp[k] || 0) + 1;
+    if ((e.xp[k] || 0) < xpNeed(lv)) continue;
+    e.skills[k] = lv + 1;
+    delete e.xp[k];
+    e.salary += GROWTH.raise;
+    const text = `📈 ${e.name} が成長！ ${SKILL_NAME[k]} ${lv}→${lv + 1}（給料+${GROWTH.raise}）`;
+    ledgers[c.id].lines.push({ text, tone: 'good' });
+    if (e.loan && ledgers[e.loan.from]) ledgers[e.loan.from].lines.push({ text: `${text}［${c.name}に貸し出し中］`, tone: 'good' });
+  }
+}
+
 /** 途中放棄の違約金 */
 export const abandonFee = (p: ActiveProject) => round10(p.price * ABANDON.penalty);
 
@@ -675,6 +693,7 @@ export function resolveDev(g: Game) {
           if (p.tags.includes('muri')) c.debt += 1;
           p.progress = Math.min(p.work, p.progress + steps);
           L(c, `「${p.name}」進捗 ${p.progress}/${p.work}${p.rush ? '（突貫・負債+2）' : ''}`);
+          team.filter(e => working(g, e)).forEach(e => gainXp(c, e, p.reqs, ledgers));
         } else if (team.length) {
           L(c, `「${p.name}」スキル不足で進まず`, 'bad');
         } else {

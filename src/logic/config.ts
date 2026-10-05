@@ -64,6 +64,10 @@ export const BIG_GOV = { minDur: 4, rpq: 300, mult: 1.4 };  // 秋の官公庁�
 export const DESIGN_BONUS = { extra: 2, mult: 1.3 };
 export const SECRET_MULTS = [0.5, 1, 1.5, 2, 3];
 export const LATE_PENALTY = 0.1;
+// 経験値：進んだ案件を担当すると、その案件に必要なスキル（持っているもの）に経験+1。
+//        「今のレベル+1」たまるとスキル+1・給料+raise（最大 maxSkill）
+export const GROWTH = { maxSkill: 5, raise: 5 };
+export const xpNeed = (lv: number) => lv + 1;
 export const ABANDON = { penalty: 0.2, rep: -1 };   // 案件の途中放棄：違約金＝受注額×0.2、評判−1（受け取り済みの中間金は返さない）
 export const INTERIM = 0.5;   // 一括払いの案件：進んだ期ごとに受注額×0.5÷期間 を中間金として先に受け取る（残りは完了時）
 export const REPEAT_BONUS = 100;

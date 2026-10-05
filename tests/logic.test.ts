@@ -233,3 +233,20 @@ describe('途中放棄', () => {
     expect(g.devSubs.a.assign.e1).toBe('');
   });
 });
+
+describe('経験値', () => {
+  it('進んだ案件の必要スキルに経験が入り、レベル+1たまると成長して給料+5', () => {
+    const g = two(); cleanHands(g);
+    g.q = 0; g.phase = 'dev';
+    const a = co(g, 'a');
+    a.engineers = [eng('e1', { BE: 2, FE: 1 }, { assign: 'p1', xp: { BE: 2 } }), eng('e2', { IN: 3 }, { assign: null })];
+    a.projects = [active('p1', 900, { BE: 1 }, { work: 3 })];
+    devOnly(g);
+    const e1 = a.engineers.find(e => e.id === 'e1')!;
+    expect(e1.skills.BE).toBe(3);
+    expect(e1.xp?.BE).toBeUndefined();
+    expect(e1.xp?.FE).toBeUndefined();   // 案件に必要ないスキルは育たない
+    expect(e1.salary).toBe(55);
+    expect(a.engineers.find(e => e.id === 'e2')!.xp).toBeUndefined();   // 担当していない社員は育たない
+  });
+});

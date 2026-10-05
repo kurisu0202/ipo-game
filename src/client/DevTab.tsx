@@ -1,6 +1,6 @@
 // ===== 開発タブ =====
 import { useState } from 'react';
-import { ABANDON, INVESTIGATE_COST, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS } from '../logic/config';
+import { ABANDON, GROWTH, INVESTIGATE_COST, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS, xpNeed } from '../logic/config';
 import { assignees, effSkills, projectCheck, quarterLabel, servicePower, skillSum, working } from '../logic/calc';
 import { abandonFee, pendingSpies } from '../logic/game';
 import type { ActiveProject, Company, DevSubmit, Engineer, Game, Skill, SpyOrder } from '../logic/types';
@@ -98,6 +98,7 @@ export function DevTab({ v, me, draft, set, locked }: P) {
                 <div className="grow">
                   <div className="row" style={{ gap: 5, flexWrap: 'wrap' }}><span className="nm">{e.name}</span><EngBadges g={g} e={e} me={me} /></div>
                   <div style={{ marginTop: 4 }}><SkillChips skills={e.skills} /></div>
+                  <XpLine e={e} />
                   <div className="sal">給料 {e.salary}{e.loan ? '（貸し手が負担）' : ''}・{placeName(me, assign[e.id] ?? '')}</div>
                 </div>
                 {!e.loan && <button className={`btn xs ${fire ? 'danger' : ''}`} disabled={locked} onClick={() => { sfx.tap(); setAssign(e.id, fire ? '' : 'fire'); }}>{fire ? '解雇取消' : '解雇'}</button>}
@@ -119,6 +120,15 @@ export function placeName(me: Company, a: string) {
   if (a === 'svc') return 'サービス担当';
   if (!a) return '待機';
   return `「${me.projects.find(p => p.id === a)?.name || '案件'}」担当`;
+}
+
+/** 経験値の進み具合（例：📈 バック 2/4） */
+export function XpLine({ e }: { e: Engineer }) {
+  const list = SKILLS.filter(k => (e.skills[k] || 0) > 0 && (e.skills[k] || 0) < GROWTH.maxSkill)
+    .map(k => ({ k, have: e.xp?.[k] || 0, need: xpNeed(e.skills[k] || 0) }))
+    .filter(x => x.have > 0);
+  if (!list.length) return null;
+  return <div className="xp">📈 経験 {list.map(x => <span key={x.k}>{SKILL_ICON[x.k]}{SKILL_NAME[x.k]} {x.have}/{x.need}</span>)}</div>;
 }
 
 export function EngBadges({ g, e, me }: { g: Game; e: Engineer; me?: Company }) {

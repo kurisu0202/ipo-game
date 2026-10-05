@@ -521,3 +521,4 @@ details.fold.secret > summary { color: var(--down); }
 .card.dropped { opacity: .75; border-style: dashed; }
 .link-btn { display: block; width: 100%; margin-top: 8px; padding: 8px 4px; background: none; border: 0; color: var(--down); font-size: 12px; font-weight: 700; text-align: center; cursor: pointer; }
 .link-btn:hover { text-decoration: underline; }
+.xp { margin-top: 4px; font-size: 11px; color: var(--up); font-weight: 700; display: flex; flex-wrap: wrap; gap: 8px; }

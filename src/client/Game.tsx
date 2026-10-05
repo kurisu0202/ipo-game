@@ -7,7 +7,7 @@ import type { BidSubmit, Company, DevSubmit, Game as G } from '../logic/types';
 import type { PlayerView } from '../logic/view';
 import { phaseKey, type ChatMsg } from '../shared/protocol';
 import { BidTab, CardDetail, CardTile } from './BidTab';
-import { DevTab, EngBadges, devSummary } from './DevTab';
+import { DevTab, EngBadges, XpLine, devSummary } from './DevTab';
 import { sfx, setSound, soundOn } from './fx/sound';
 import type { Snapshot } from './session';
 import { CountUp, Face, LogoMark, Sheet, SkillChips, Sparkline, companyColor } from './ui';
@@ -159,7 +159,7 @@ function MeTab({ v, me }: { v: PlayerView; me: Company }) {
       {me.engineers.map(e => (
         <div className="eng" key={e.id}><Face name={e.name} /><div className="grow">
           <div className="row" style={{ gap: 5, flexWrap: 'wrap' }}><span className="nm">{e.name}</span><EngBadges g={g} e={e} me={me} /></div>
-          <div style={{ marginTop: 4 }}><SkillChips skills={e.skills} /></div><div className="sal">給料 {e.salary}</div></div></div>
+          <div style={{ marginTop: 4 }}><SkillChips skills={e.skills} /></div><XpLine e={e} /><div className="sal">給料 {e.salary}</div></div></div>
       ))}
       {g.companies.flatMap(c => c.engineers.filter(e => e.loan?.from === me.id).map(e => (
         <div className="eng" key={e.id} style={{ opacity: .75 }}><Face name={e.name} /><div className="grow"><span className="nm">{e.name}</span> <span className="badge-k rent">{c.name}に貸し出し中</span><div className="sal">給料 {e.salary}（自社負担）</div></div></div>

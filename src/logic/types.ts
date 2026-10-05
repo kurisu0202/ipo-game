@@ -15,6 +15,7 @@ export interface Engineer {
   loan?: { from: string; until: number; share: number };
   spy?: { for: string; order: SpyOrder | null; src: 'rent' | 'hh' };
   checked?: 'spy' | 'clean';
+  xp?: Skills;   // 経験値（スキルごと）
 }
 
 export interface Project {
