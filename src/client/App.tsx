@@ -54,7 +54,9 @@ function Playing({ session, onExit }: { session: Session; onExit: () => void }) 
   const [lastKey, setLastKey] = useState(key);
   if (key !== lastKey) { setLastKey(key); try { setSeen(Number(localStorage.getItem(key) || 0)); } catch { setSeen(0); } }
 
-  const showReveal = !!g && !!g.reveal && g.revealSeq > seen;
+  // 既読がこのゲームの回数より大きいのは、前のゲームの記録が残っているとき → 未読扱い
+  const seenHere = g && seen > g.revealSeq ? 0 : seen;
+  const showReveal = !!g && !!g.reveal && g.revealSeq > seenHere;
   const markSeen = () => {
     if (!g) return;
     setSeen(g.revealSeq);

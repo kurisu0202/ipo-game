@@ -57,11 +57,17 @@ export function savedLocal(): Game | null {
 }
 export function clearLocal() { try { localStorage.removeItem(LOCAL_KEY); } catch { /* 無視 */ } }
 
+// ゲームごとに別のIDにする（演出の既読管理がゲームをまたいで混ざらないように）
+function newLocalGame(names: string[]): Game {
+  const seed = (Math.random() * 2 ** 31) | 0;
+  return createGame(names.map((n, i) => ({ id: `c${i}`, name: n })), seed, `local-${seed}-${Date.now().toString(36)}`);
+}
+
 export class LocalSession extends Base {
   private g: Game;
   constructor(names: string[] | null, resume?: Game) {
     super({ mode: 'local', stage: 'pass' });
-    this.g = resume ?? createGame(names!.map((n, i) => ({ id: `c${i}`, name: n })), (Math.random() * 2 ** 31) | 0, 'local');
+    this.g = resume ?? newLocalGame(names!);
     this.refresh('pass');
   }
   private current(): string {
@@ -85,7 +91,7 @@ export class LocalSession extends Base {
   start() { /* 作成時に開始済み */ }
   again() {
     const names = this.g.companies.map(c => c.name);
-    this.g = createGame(names.map((n, i) => ({ id: `c${i}`, name: n })), (Math.random() * 2 ** 31) | 0, 'local');
+    this.g = newLocalGame(names);
     this.refresh('pass');
   }
   leave() { if (this.g.phase === 'end') clearLocal(); }
