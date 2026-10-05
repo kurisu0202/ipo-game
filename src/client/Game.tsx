@@ -1,16 +1,16 @@
 // ===== ゲーム画面 =====
 import { useEffect, useMemo, useState } from 'react';
 import { CARDS, GAME, HAPPENINGS, PROJECT_TYPES, SEASONS, SERVICE } from '../logic/config';
-import { payroll, quarterLabel, season, yen } from '../logic/calc';
+import { payroll, projectCheck, quarterLabel, season, yen } from '../logic/calc';
 import { defaultDev, emptyBid } from '../logic/game';
-import type { BidSubmit, Company, DevSubmit, Game as G } from '../logic/types';
+import type { ActiveProject, BidSubmit, Company, DevSubmit, Game as G } from '../logic/types';
 import type { PlayerView } from '../logic/view';
 import { phaseKey, type ChatMsg } from '../shared/protocol';
 import { BidTab, CardDetail, CardTile } from './BidTab';
-import { DevTab, EngBadges, XpLine, devSummary } from './DevTab';
+import { DevTab, EngBadges, ProjectSkillSheet, XpLine, devSummary } from './DevTab';
 import { sfx, setSound, soundOn } from './fx/sound';
 import type { Snapshot } from './session';
-import { CountUp, Face, LogoMark, Sheet, SkillChips, Sparkline, companyColor } from './ui';
+import { CountUp, Face, LogoMark, Sheet, SkillChips, Sparkline, companyColor, useLongPress } from './ui';
 
 type Tab = 'main' | 'me' | 'rivals' | 'log';
 
@@ -141,9 +141,23 @@ function bidSummary(g: G, d: BidSubmit) {
 }
 
 // ---------- 自社 ----------
+function MyProjectCard({ g, me, p, onOpen }: { g: G; me: Company; p: ActiveProject; onOpen: () => void }) {
+  const lp = useLongPress(onOpen, onOpen);
+  const chk = projectCheck(g, me, p);
+  return (
+    <div className="card lp" {...lp} role="button">
+      <div className="row"><span className={`ptype ${p.type}`}>{PROJECT_TYPES[p.type].icon}</span><b className="grow ellipsis">{p.name}</b><span className="num gold">{p.price.toLocaleString()}</span></div>
+      <div className="pbar"><i style={{ width: `${p.progress / p.work * 100}%` }} /></div>
+      <div className="row note" style={{ justifyContent: 'space-between' }}><span>進捗 {p.progress}/{p.work}・納期 {quarterLabel(p.deadline)}</span>
+        <span className={chk.ok ? 'up' : 'down'}>{chk.ok ? '✓ スキル足りてる' : '⚠ スキル不足'}</span></div>
+    </div>
+  );
+}
+
 function MeTab({ v, me }: { v: PlayerView; me: Company }) {
   const g = v.game;
   const [detail, setDetail] = useState<null | (typeof me.hand)[number]>(null);
+  const [proj, setProj] = useState<string | null>(null);
   const pay = payroll(g, me).reduce((t, e) => t + e.salary, 0);
   return (
     <div className="content">
@@ -164,12 +178,10 @@ function MeTab({ v, me }: { v: PlayerView; me: Company }) {
       {g.companies.flatMap(c => c.engineers.filter(e => e.loan?.from === me.id).map(e => (
         <div className="eng" key={e.id} style={{ opacity: .75 }}><Face name={e.name} /><div className="grow"><span className="nm">{e.name}</span> <span className="badge-k rent">{c.name}に貸し出し中</span><div className="sal">給料 {e.salary}（自社負担）</div></div></div>
       )))}
-      <div className="sec-title">🛠️ 進行中の案件 <span className="n">{me.projects.length}</span></div>
+      <div className="sec-title">🛠️ 進行中の案件 <span className="n">{me.projects.length}</span><small>長押しでスキルの過不足</small></div>
       {me.projects.length === 0 && <div className="empty">なし</div>}
-      {me.projects.map(p => (
-        <div className="card" key={p.id}><div className="row"><span className={`ptype ${p.type}`}>{PROJECT_TYPES[p.type].icon}</span><b className="grow ellipsis">{p.name}</b><span className="num gold">{p.price.toLocaleString()}</span></div>
-          <div className="pbar"><i style={{ width: `${p.progress / p.work * 100}%` }} /></div><div className="note">進捗 {p.progress}/{p.work}・納期 {quarterLabel(p.deadline)}</div></div>
-      ))}
+      {me.projects.map(p => <MyProjectCard key={p.id} g={g} me={me} p={p} onOpen={() => setProj(p.id)} />)}
+      {proj && me.projects.some(p => p.id === proj) && <ProjectSkillSheet g={g} me={me} p={me.projects.find(p => p.id === proj)!} onClose={() => setProj(null)} />}
       <div className="sec-title">🃏 手札 <span className="n">{me.hand.length}</span><small>長押しで詳細</small></div>
       <div className="hand">{me.hand.map((k, i) => <CardTile key={i} k={k} onLong={() => setDetail(k)} onTap={() => setDetail(k)} />)}</div>
       <div className="kpis" style={{ marginTop: 6 }}>

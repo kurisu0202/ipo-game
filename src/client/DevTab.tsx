@@ -1,7 +1,7 @@
 // ===== 開発タブ =====
 import { useState } from 'react';
 import { ABANDON, GROWTH, INVESTIGATE_COST, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS, xpNeed } from '../logic/config';
-import { assignees, effSkills, projectCheck, quarterLabel, servicePower, skillSum, working } from '../logic/calc';
+import { assignees, effSkills, projectCheck, quarterLabel, servicePower, skillSum, sumSkills, working } from '../logic/calc';
 import { abandonFee, pendingSpies } from '../logic/game';
 import type { ActiveProject, Company, DevSubmit, Engineer, Game, Skill, SpyOrder } from '../logic/types';
 import type { PlayerView } from '../logic/view';
@@ -145,6 +145,53 @@ export function EngBadges({ g, e, me }: { g: Game; e: Engineer; me?: Company }) 
       {e.restQ === g.q && <span className="badge-k rest">今期お休み</span>}
       {e.restQ === g.q + 1 && <span className="badge-k rest">来期お休み</span>}
     </>
+  );
+}
+
+/** 自社の案件：今の担当で何が足りていて何が足りないか */
+export function ProjectSkillSheet({ g, me, p, onClose }: { g: Game; me: Company; p: ActiveProject; onClose: () => void }) {
+  const chk = projectCheck(g, me, p);
+  const team = assignees(me, p.id);
+  const free = me.engineers.filter(e => !e.assign && working(g, e));
+  const freeSum = sumSkills(g, me, free);
+  const allSum = sumSkills(g, me, me.engineers);
+  const rows = SKILLS.filter(k => p.reqs[k]).map(k => {
+    const need = p.reqs[k] || 0, have = chk.sums[k] || 0;
+    const status = have >= need ? { t: '✓ 足りている', c: 'up' }
+      : have + (freeSum[k] || 0) >= need ? { t: `空いている社員で補える`, c: 'gold' }
+        : (allSum[k] || 0) >= need ? { t: '他の仕事から回せば足りる', c: 'gold' }
+          : { t: `社員全員でも${need - (allSum[k] || 0)}不足`, c: 'down' };
+    return { k, need, have, free: freeSum[k] || 0, all: allSum[k] || 0, status };
+  });
+  const place = (e: Engineer) => (e.assign === 'svc' ? 'サービス' : e.assign ? me.projects.find(x => x.id === e.assign)?.name || '案件' : '空き');
+  const holders = (k: Skill) => me.engineers.filter(e => (e.skills[k] || 0) > 0 && e.assign !== p.id);
+  return (
+    <Sheet onClose={onClose} title={<>{PROJECT_TYPES[p.type].icon} {p.name}</>}
+      sub={chk.ok ? '✓ 今の担当のままなら、次の開発フェーズで進みます' : team.length ? `⚠ 今の担当では ${missingText(chk.missing)} 足りません` : '⚠ まだ担当者がいません（開発フェーズで割り当て）'}>
+      <Gauges reqs={p.reqs} sums={chk.sums} />
+      <div className="card">
+        <b>スキルごとの状況</b>
+        <table className="ptable">
+          <thead><tr><th>スキル</th><th>必要</th><th>担当中</th><th>空き</th><th>全員</th></tr></thead>
+          <tbody>{rows.map(r => (
+            <tr key={r.k}><td>{SKILL_ICON[r.k]} {SKILL_NAME[r.k]}</td><td>{r.need}</td><td>{r.have}</td><td>{r.free}</td><td>{r.all}</td></tr>
+          ))}</tbody>
+        </table>
+        <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+          {rows.map(r => <li key={r.k}><b>{SKILL_NAME[r.k]}</b>：<span className={r.status.c}>{r.status.t}</span>
+            {r.have < r.need && holders(r.k).length > 0 && <div className="note">持っている人：{holders(r.k).map(e => `${e.name}（${SKILL_NAME[r.k]}${effSkills(g, me, e)[r.k] || 0}・${place(e)}${working(g, e) ? '' : '・今期休み'}）`).join('、')}</div>}
+          </li>)}
+        </ul>
+      </div>
+      <div className="card">
+        <b>担当中の社員</b>
+        {team.length === 0 && <div className="note" style={{ marginTop: 6 }}>まだいません</div>}
+        {team.map(e => (
+          <div className="member" key={e.id}><Face name={e.name} size={26} /><span className="nm">{e.name}</span>{!working(g, e) && <span className="tagx">休み</span>}<span className="grow" /><SkillChips skills={effSkills(g, me, e)} /></div>
+        ))}
+      </div>
+      <div className="note">{g.phase === 'bid' ? '割り当ての変更は開発フェーズで行います。足りないスキルは、この入札フェーズで採用・レンタルして補うこともできます。' : '割り当ては「開発」タブで変更できます。足りないスキルは、次の入札フェーズで採用・レンタルして補うこともできます。'}</div>
+    </Sheet>
   );
 }
 
