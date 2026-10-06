@@ -16,7 +16,7 @@ import {
   bidFactor, canBid, hireBonus, launchCost, payFactor, rushDebt, salaryMult, serviceIncome,
   boostAll, hasSlot, projectSums, slots,
 } from './calc';
-import { chance, int, pick, shuffle, weighted } from './rng';
+import { chance, int, next, pick, shuffle, weighted } from './rng';
 import type {
   ActiveProject, BidPct, BidSubmit, Fund, FundKind, IndustryKey, PickSubmit, TraitKey, CardKey, Company, DevSubmit, Engineer, FinalRow, Game, HappeningKey, HireFee,
   Project, ProjectType, RevealBlock, RevealLine, Skill, Skills, SpyOrder, Tag,
@@ -698,14 +698,29 @@ function doTraining(g: Game, c: Company, s: DevSubmit, L: (c: Company, text: str
     e.skills[k] = lv + 1;
     if (e.xp) delete e.xp[k];
     e.salary += TRAINING.raise;
-    e.restQ = g.q + 1;
     e.trainedQ = g.q;
     if (TRAINING.fee) c.cash -= TRAINING.fee;
     if (!e.trait && chance(g, TRAIT.train)) {
       grantTrait(e, rollTrait(g));
       L(c, `✨ ${e.name} が研修で特技【${TRAITS[e.trait!].icon}${TRAITS[e.trait!].name}】に目覚めた！`, 'gold');
     }
-    L(c, `📚 ${e.name} が研修で${SKILL_NAME[k]}${lv ? ` ${lv}→${lv + 1}` : 'を新しく習得'}！（給料+${TRAINING.raise}・来期は休み${TRAINING.fee ? `・研修費 −${TRAINING.fee}` : ''}）`, 'good');
+    const tough = e.trait === 'tough';
+    if (!tough) e.restQ = g.q + 1;
+    L(c, `📚 ${e.name} が研修で${SKILL_NAME[k]}${lv ? ` ${lv}→${lv + 1}` : 'を新しく習得'}！（給料+${TRAINING.raise}・${tough ? '💪体力おばけで来期も出勤' : '来期は休み'}${TRAINING.fee ? `・研修費 −${TRAINING.fee}` : ''}）`, 'good');
+    if (e.trait === 'study') {
+      const other = SKILLS.filter(x => x !== k && (e.skills[x] || 0) > 0 && (e.skills[x] || 0) < GROWTH.maxSkill).sort((a, b) => (e.skills[b] || 0) - (e.skills[a] || 0))[0];
+      if (other) {
+        const olv = e.skills[other] || 0;
+        e.xp = e.xp || {};
+        e.xp[other] = (e.xp[other] || 0) + 1;
+        if ((e.xp[other] || 0) >= xpNeed(olv)) {
+          e.skills[other] = olv + 1;
+          delete e.xp[other];
+          e.salary += GROWTH.raise;
+          L(c, `📖 勉強熱心な ${e.name} は${SKILL_NAME[other]}も ${olv}→${olv + 1} に成長！（給料+${GROWTH.raise}）`, 'good');
+        } else L(c, `📖 勉強熱心な ${e.name} は${SKILL_NAME[other]}の経験値も+1`, 'muted');
+      }
+    }
   }
 }
 
@@ -1003,9 +1018,17 @@ export function resolveDev(g: Game) {
       if (!c.invest?.length) return;
       let total = 0, paid = 0;
       let lucky = c.engineers.some(e => e.trait === 'investor');
+      const gambler = c.engineers.some(e => e.trait === 'gambler');
       for (const h of c.invest) {
         const f = g.funds!.find(x => x.id === h.fund);
         let m = f?.mult ?? 1;
+        if (gambler && f) {
+          const ms = [...new Set(FUNDS[f.kind].outcomes.map(o => o[0]))].sort((a, b) => a - b);
+          const i = ms.indexOf(m);
+          const r = next(g);
+          const j = r < TRAIT.gambleUp ? Math.min(ms.length - 1, i + 1) : r < TRAIT.gambleUp + TRAIT.gambleDown ? Math.max(0, i - 1) : i;
+          if (j !== i) { lines.push({ text: `🎲 ${c.name}：ギャンブラーの勝負勘で ${f.name} が ${j > i ? '1段階アップ' : '1段階ダウン'}（×${m}→×${ms[j]}）`, tone: j > i ? 'good' : 'bad' }); m = ms[j]; }
+        }
         if (lucky && f) {
           const ms = [...new Set(FUNDS[f.kind].outcomes.map(o => o[0]))].sort((a, b) => a - b);
           if (m === ms[0] && ms.length > 1) { m = ms[1]; lucky = false; lines.push({ text: `🔮 ${c.name}：投資の勘で ${f.name} の損を回避（×${f.mult}→×${m}）`, tone: 'good' }); }

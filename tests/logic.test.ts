@@ -458,3 +458,40 @@ describe('特技', () => {
     expect({ quit, saved }).toEqual({ quit: true, saved: true });
   });
 });
+
+describe('特技（★1の追加分）', () => {
+  const setup = () => {
+    const g = two(); cleanHands(g);
+    g.q = 0; g.phase = 'dev';
+    const a = co(g, 'a');
+    a.projects = [];
+    return { g, a };
+  };
+  it('体力おばけは研修のあとも休まない・勉強熱心はもう1つのスキルにも経験値', () => {
+    const { g, a } = setup();
+    a.engineers = [eng('t', { BE: 2 }, { trait: 'tough' }), eng('s', { BE: 2, FE: 3 }, { trait: 'study', xp: { FE: 3 } })];
+    devOnly(g, (c, s) => { if (c.id === 'a') { s.assign = { t: 'train', s: 'train' }; s.train = { t: 'BE', s: 'BE' }; } });
+    const t = a.engineers.find(e => e.id === 't')!, st = a.engineers.find(e => e.id === 's')!;
+    expect(t.skills.BE).toBe(3);
+    expect(t.restQ).not.toBe(1);
+    expect(st.restQ).toBe(1);
+    expect(st.skills).toEqual({ BE: 3, FE: 4 });   // FE は経験値 3+1=4 で 3→4
+  });
+  it('ギャンブラーは投資の結果が1段階上下することがある', () => {
+    let up = false, down = false;
+    for (let seed = 1; seed < 300 && !(up && down); seed++) {
+      const g = createGame([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], seed, 'x', 12, false);
+      cleanHands(g);
+      g.q = 3; g.phase = 'dev';
+      const a = co(g, 'a');
+      a.engineers = [eng('x', { BE: 1 }, { trait: 'gambler' })];
+      g.funds = [{ id: 'f1', kind: 'index', name: 'テスト' }];
+      a.invest = [{ fund: 'f1', amount: 1000 }];
+      devOnly(g);
+      const text = g.reveal!.blocks.flatMap(b => b.lines.map(l => l.text)).join('\n');
+      if (text.includes('1段階アップ')) up = true;
+      if (text.includes('1段階ダウン')) down = true;
+    }
+    expect({ up, down }).toEqual({ up: true, down: true });
+  });
+});

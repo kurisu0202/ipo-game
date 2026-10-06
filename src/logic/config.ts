@@ -255,9 +255,12 @@ export const TRAITS: Record<TraitKey, TraitSpec> = {
   investor: { name: '投資の勘', icon: '🔮', rarity: 2, group: 'お金', desc: '会社の投資で一番悪い結果が出たとき、1年に1回だけ1段階よい結果になる' },
   genius: { name: '天才肌', icon: '🌟', rarity: 3, group: 'クセあり', desc: 'スキルがすべて+1。ただし毎期20%で気分が乗らずに休む' },
   hopper: { name: '転職癖', icon: '🏃', rarity: 2, group: 'クセあり', desc: 'スキルがすべて+1。ただし毎年冬の決算で30%の確率で辞めてしまう' },
+  tough: { name: '体力おばけ', icon: '💪', rarity: 1, group: '働き方', desc: '研修のあとも休まない（研修した次の期もすぐ働ける）' },
+  study: { name: '勉強熱心', icon: '📖', rarity: 1, group: '成長', desc: '研修のとき、ほかに持っているスキル1つにも経験値+1' },
+  gambler: { name: 'ギャンブラー', icon: '🎲', rarity: 1, group: 'クセあり', desc: '会社の投資の結果が、投資先ごとに10%で1段階よくなり、10%で1段階悪くなる' },
 };
 export const TRAIT = {
   market: 0.18, rookie: 0.08, legend: 0.35, train: 0.15,   // 特技を持っている／目覚める確率
   rarityWeight: { 1: 3, 2: 2, 3: 1 } as Record<1 | 2 | 3, number>,
-  fastChance: 0.3, geniusRest: 0.2, hopperQuit: 0.3, salesMult: 1.1,
+  fastChance: 0.3, geniusRest: 0.2, hopperQuit: 0.3, salesMult: 1.1, gambleUp: 0.1, gambleDown: 0.1,
 };
