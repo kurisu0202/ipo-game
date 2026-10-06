@@ -6,6 +6,7 @@ export type Tag = 'rush' | 'rich' | 'repeat' | 'muri' | 'legacy' | 'record' | 'h
 export type CardKey = 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7' | 'A8' | 'A9' | 'S1' | 'D1' | 'D2' | 'D3' | 'D4' | 'D5' | 'D6' | 'D7' | 'D8' | 'D9';
 export type HappeningKey = 'H1' | 'H2' | 'H3' | 'H4' | 'H5' | 'H6' | 'H7' | 'H8' | 'H9' | 'H10' | 'H11' | 'H12' | 'H13' | 'H14' | 'H15' | 'H16' | 'H17' | 'H18';
 export type IndustryKey = 'sier' | 'web' | 'saas' | 'ai' | 'maint' | 'consul';
+export type TraitKey = 'multi' | 'fast' | 'fire' | 'night' | 'refactor' | 'leader' | 'mentor' | 'mood' | 'sales' | 'cheap' | 'investor' | 'genius' | 'hopper';
 export type FundKind = 'bond' | 'index' | 'growth' | 'estate' | 'crypto' | 'angel';
 export interface Fund { id: string; kind: FundKind; name: string; mult?: number }   // mult は冬に決まる
 export interface Holding { fund: string; amount: number }
@@ -21,6 +22,7 @@ export interface Engineer {
   checked?: 'spy' | 'clean';
   xp?: Skills;   // 経験値（スキルごと）
   trainedQ?: number;   // 最後に研修に行った期
+  trait?: TraitKey;    // 特技（1人1つまで）
 }
 
 export interface Project {

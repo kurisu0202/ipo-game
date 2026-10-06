@@ -6,6 +6,7 @@ import { bidAmount, pendingSpies } from '../logic/game';
 import type { BidPct, BidSubmit, CardKey, Company, Game, HireFee, Project, Skills } from '../logic/types';
 import type { PlayerView } from '../logic/view';
 import { Coach, SecretFile } from './parts';
+import { TraitLine } from './DevTab';
 import { sfx } from './fx/sound';
 import { Face, Sheet, SkillChips, companyColor, useLongPress } from './ui';
 
@@ -45,6 +46,7 @@ export function BidTab({ v, me, draft, set, locked }: P) {
                   <span className={`check`} style={{ color: 'var(--accent)' }}>{on ? '✓' : ''}</span>
                 </div>
                 {e && <div style={{ marginTop: 8 }}><SkillChips skills={e.skills} /></div>}
+                {e?.trait && <div style={{ marginTop: 6 }}><TraitLine e={e} /></div>}
                 <div className="note" style={{ marginTop: 6 }}>給料は貸し手持ち。担当した案件の支払いの{o.share}%を貸し手に渡します</div>
               </button>
             );
@@ -62,11 +64,12 @@ export function BidTab({ v, me, draft, set, locked }: P) {
               <Face name={e.name} size={36} />
               <div className="grow">
                 <div className="row" style={{ gap: 6 }}><b>{e.name}</b>
-                  {e.legend && <span className="badge-k legend">伝説</span>}{e.rookie && <span className="badge-k rookie">新人</span>}</div>
+                  {e.legend && <span className="badge-k legend">伝説</span>}{e.rookie && <span className="badge-k rookie">新人</span>}{e.trait && <span className="badge-k trait r3">✨特技あり</span>}</div>
                 <div className="note">給料 <b>{e.salary}</b>万円/期{e.rookie ? '・毎年春に成長' : ''}{hireBonus(me, e) ? <span className="up">・業種ボーナス：契約金が同額なら勝つ</span> : null}</div>
               </div>
             </div>
             <div style={{ margin: '8px 0' }}><SkillChips skills={e.skills} /></div>
+            {e.trait && <div style={{ marginBottom: 8 }}><TraitLine e={e} /></div>}
             <div className="seg">
               <button className={fee === undefined ? 'on' : 'off'} disabled={locked} onClick={() => set(d => { const hires = { ...d.hires }; delete hires[e.id]; return { ...d, hires }; })}>見送り</button>
               {HIRE_FEES.map(f => <button key={f} className={fee === f ? 'on gold' : ''} disabled={locked} onClick={() => { sfx.tap(); set(d => ({ ...d, hires: { ...d.hires, [e.id]: f as HireFee } })); }}>{f}万</button>)}

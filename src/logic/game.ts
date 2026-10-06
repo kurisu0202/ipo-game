@@ -3,7 +3,7 @@
 //  すべての乱数は g.seed から作るので、同じ入力なら同じ結果になる
 // =====================================================================
 import {
-  ABANDON, ACCUSE, FUNDS, GROWTH, INDUSTRIES, INVEST, TRAINING, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
+  ABANDON, ACCUSE, FUNDS, GROWTH, INDUSTRIES, INVEST, TRAINING, TRAIT, TRAITS, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
   EMPLOYEE_EVENT, ENGINEER, FIRE_DEBT, FIRST_NAMES, GAME, HACKATHON, HAPPENINGS, HAPPENING_FX, HIRE_FEES, INCIDENT,
   INTERIM, INTEREST, INVESTIGATE_COST, LAST_NAMES, LATE_PENALTY, MUST_SHARE, PROJECT_TYPES, REMOTE_SALARY, RENTAL, REPEAT_BONUS,
   REP_DISCOUNT, SECRET_MULTS, SERVICE, SEVERANCE_QUARTERS, SKILLS, SKILL_NAME, SPY_STEAL,
@@ -14,10 +14,11 @@ import {
   assignees, checkReqs, companyOf, effSkills, payroll, quarterLabel, round10, season, servicePower, serviceNeed,
   signedYen, skillSum, sumSkills, totalQ, totalYears, working, yen,
   bidFactor, canBid, hireBonus, launchCost, payFactor, rushDebt, salaryMult, serviceIncome,
+  boostAll, hasSlot, projectSums, slots,
 } from './calc';
 import { chance, int, pick, shuffle, weighted } from './rng';
 import type {
-  ActiveProject, BidPct, BidSubmit, Fund, FundKind, IndustryKey, PickSubmit, CardKey, Company, DevSubmit, Engineer, FinalRow, Game, HappeningKey, HireFee,
+  ActiveProject, BidPct, BidSubmit, Fund, FundKind, IndustryKey, PickSubmit, TraitKey, CardKey, Company, DevSubmit, Engineer, FinalRow, Game, HappeningKey, HireFee,
   Project, ProjectType, RevealBlock, RevealLine, Skill, Skills, SpyOrder, Tag,
 } from './types';
 
@@ -54,7 +55,24 @@ export function genEngineer(g: Game, kind: 'normal' | 'rookie' | 'legend'): Engi
     e.legend = true;
   }
   e.salary = salary;
+  if (chance(g, kind === 'legend' ? TRAIT.legend : kind === 'rookie' ? TRAIT.rookie : TRAIT.market)) grantTrait(e, rollTrait(g));
   return e;
+}
+
+/** 特技をランダムに1つ（レアなものほど出にくい） */
+export function rollTrait(g: Game): TraitKey {
+  return weighted(g, Object.keys(TRAITS) as TraitKey[], k => TRAIT.rarityWeight[TRAITS[k].rarity]);
+}
+
+/** 特技を付ける（天才肌・転職癖はスキル+1と給料アップ、薄給は給料半分） */
+export function grantTrait(e: Engineer, k: TraitKey) {
+  e.trait = k;
+  if (k === 'genius' || k === 'hopper') {
+    const n = SKILLS.filter(s => (e.skills[s] || 0) > 0 && (e.skills[s] || 0) < GROWTH.maxSkill).length;
+    boostAll(e);
+    e.salary += ENGINEER.salaryPerSkill * n;
+  }
+  if (k === 'cheap') e.salary = Math.max(10, round10(e.salary / 2));
 }
 
 const PROJECT_NAMES: Record<ProjectType, string[]> = {
@@ -211,6 +229,12 @@ export function startQuarter(g: Game) {
   const hs = HAPPENINGS[h];
   g.companies.forEach(c => { c.hitsThisQuarter = 0; c.quarterStartCash = c.cash; });
   if (season(g.q) === 0 || !g.funds) g.funds = newFunds(g);
+  g.companies.forEach(c => {
+    const mood = c.engineers.some(e => e.trait === 'mood');
+    c.engineers.forEach(e => {
+      if (e.trait === 'genius' && e.restQ !== g.q && chance(g, TRAIT.geniusRest * (mood ? 0.5 : 1))) { e.restQ = g.q; log(g, `${c.name}：${e.name}（天才肌）は気分が乗らず今期は休み`); }
+    });
+  });
   log(g, `━━ ${quarterLabel(g.q)}（第${g.q + 1}期）━━ ハプニング「${hs.name}」`);
 
   // 春：新人の成長
@@ -241,7 +265,7 @@ export function startQuarter(g: Game) {
       break;
     }
     case 'H7': g.companies.forEach(c => { const v = c.engineers.length * HAPPENING_FX.rentPerHead; c.cash -= v; log(g, `${c.name}：賃料 −${v}`); }); break;
-    case 'H8': g.companies.forEach(c => { if (!c.engineers.length) return; const e = pick(g, c.engineers); e.restQ = g.q; log(g, `${c.name}：${e.name} がインフルエンザで休み`); }); break;
+    case 'H8': g.companies.forEach(c => { if (!c.engineers.length) return; if (c.engineers.some(x => x.trait === 'mood')) { log(g, `${c.name}：ムードメーカーのおかげでインフルエンザの休みなし`); return; } const e = pick(g, c.engineers); e.restQ = g.q; log(g, `${c.name}：${e.name} がインフルエンザで休み`); }); break;
     case 'H10': g.companies.forEach(c => c.projects.forEach(p => { p.deadline++; })); break;
     case 'H13': g.companies.forEach(c => { if (c.service && c.service.level >= 1) { c.cash += HAPPENING_FX.subsidy; log(g, `${c.name}：補助金 +${HAPPENING_FX.subsidy}`); } }); break;
     case 'H14': pool.push(genEngineer(g, 'legend')); break;
@@ -280,7 +304,7 @@ export function emptyBid(): BidSubmit { return { bids: {}, hires: {}, spyOrders:
 export function defaultDev(g: Game, cid: string): DevSubmit {
   const c = companyOf(g, cid)!;
   const assign: Record<string, string> = {};
-  c.engineers.forEach(e => { assign[e.id] = e.assign && (e.assign === 'svc' ? !!c.service : c.projects.some(p => p.id === e.assign)) ? e.assign : ''; });
+  c.engineers.forEach(e => { assign[e.id] = slots(e.assign).filter(t => (t === 'svc' ? !!c.service : c.projects.some(p => p.id === t))).slice(0, e.trait === 'multi' ? 2 : 1).join('+'); });
   return {
     assign, rush: [], launch: false, sleeper: c.sleeper?.engineerId || '', sleeperOrder: c.sleeper?.order || 'intel', spyOrders: {},
   };
@@ -322,10 +346,11 @@ function cleanDev(g: Game, cid: string, s: DevSubmit): DevSubmit {
     const v = s.assign?.[e.id];
     if (v === undefined) continue;
     if (v === '' || (v === 'svc' && willHaveSvc) || (v === 'fire' && !e.loan) || c.projects.some(p => p.id === v)) out.assign[e.id] = v;
+    else if (e.trait === 'multi' && slots(v).length === 2 && new Set(slots(v)).size === 2 && slots(v).every(t => (t === 'svc' && willHaveSvc) || c.projects.some(p => p.id === t))) out.assign[e.id] = v;
     else if (v === 'train' && canTrain(g, e, s.train?.[e.id])) { out.assign[e.id] = 'train'; (out.train ??= {})[e.id] = s.train![e.id]; }
   }
   out.drop = [...new Set((s.drop || []).filter(id => c.projects.some(p => p.id === id)))];
-  for (const e of c.engineers) if (out.drop.includes(out.assign[e.id])) out.assign[e.id] = '';
+  for (const e of c.engineers) if (slots(out.assign[e.id]).some(t => out.drop!.includes(t))) out.assign[e.id] = slots(out.assign[e.id]).filter(t => !out.drop!.includes(t)).join('+');
   out.rush = (s.rush || []).filter(id => c.projects.some(p => p.id === id) && !out.drop!.includes(id));
   out.launch = !c.service && !!s.launch;
   const own = (id?: string) => c.engineers.find(e => e.id === id);
@@ -643,12 +668,12 @@ export function resolveBid(g: Game) {
 interface Ledger { lines: RevealLine[]; jackpot: boolean }
 
 /** 経験値：案件で使ったスキルが育つ。成長したら給料も上がる */
-function gainXp(c: Company, e: Engineer, reqs: Skills, ledgers: Record<string, Ledger>) {
+function gainXp(c: Company, e: Engineer, reqs: Skills, ledgers: Record<string, Ledger>, amount = 1) {
   for (const k of SKILLS) {
     const lv = e.skills[k] || 0;
     if (!reqs[k] || !lv || lv >= GROWTH.maxSkill) continue;
     e.xp = e.xp || {};
-    e.xp[k] = (e.xp[k] || 0) + 1;
+    e.xp[k] = (e.xp[k] || 0) + amount;
     if ((e.xp[k] || 0) < xpNeed(lv)) continue;
     e.skills[k] = lv + 1;
     delete e.xp[k];
@@ -676,6 +701,10 @@ function doTraining(g: Game, c: Company, s: DevSubmit, L: (c: Company, text: str
     e.restQ = g.q + 1;
     e.trainedQ = g.q;
     if (TRAINING.fee) c.cash -= TRAINING.fee;
+    if (!e.trait && chance(g, TRAIT.train)) {
+      grantTrait(e, rollTrait(g));
+      L(c, `✨ ${e.name} が研修で特技【${TRAITS[e.trait!].icon}${TRAITS[e.trait!].name}】に目覚めた！`, 'gold');
+    }
     L(c, `📚 ${e.name} が研修で${SKILL_NAME[k]}${lv ? ` ${lv}→${lv + 1}` : 'を新しく習得'}！（給料+${TRAINING.raise}・来期は休み${TRAINING.fee ? `・研修費 −${TRAINING.fee}` : ''}）`, 'good');
   }
 }
@@ -744,7 +773,7 @@ export function resolveDev(g: Game) {
       c.cash -= fee;
       c.rep += ABANDON.rep;
       c.projects = c.projects.filter(x => x !== p);
-      c.engineers.forEach(e => { if (e.assign === p.id) e.assign = null; });
+      c.engineers.forEach(e => { if (hasSlot(e.assign, p.id)) e.assign = slots(e.assign).filter(t => t !== p.id).join('+') || null; });
       L(c, `「${p.name}」を途中放棄（違約金 −${fee}・評判${ABANDON.rep}）`, 'bad');
       headlines.push(`${c.name}、「${p.name}」から撤退`);
       log(g, `${c.name}：「${p.name}」を放棄`);
@@ -780,16 +809,22 @@ export function resolveDev(g: Game) {
     // 10〜12. 案件の進行と支払い
     for (const p of [...c.projects]) {
       const team = assignees(c, p.id);
-      const chk = checkReqs(p.reqs, sumSkills(g, c, team, true));
+      const chk = checkReqs(p.reqs, projectSums(g, c, p, team, true));
+      const crew = team.filter(e => working(g, e));
       let steps = 0;
       if (!stopped) {
         if (chk.ok) {
           steps = p.rush ? 2 : 1;
-          if (p.rush) { c.debt += rushDebt(c); c.stats.rushes++; }
+          const fast = !p.rush && crew.some(e => e.trait === 'fast') && chance(g, TRAIT.fastChance);
+          if (fast) steps = 2;
+          const night = crew.some(e => e.trait === 'night');
+          const rd = p.rush && !night ? rushDebt(c) : 0;
+          if (p.rush) { c.debt += rd; c.stats.rushes++; }
           if (p.tags.includes('muri')) c.debt += 1;
           p.progress = Math.min(p.work, p.progress + steps);
-          L(c, `「${p.name}」進捗 ${p.progress}/${p.work}${p.rush ? '（突貫・負債+2）' : ''}`);
-          team.filter(e => working(g, e)).forEach(e => gainXp(c, e, p.reqs, ledgers));
+          L(c, `「${p.name}」進捗 ${p.progress}/${p.work}${p.rush ? (rd ? `（突貫・負債+${rd}）` : '（突貫・🌙夜型で負債なし）') : fast ? '（⚡爆速で2進んだ！）' : ''}`);
+          const mentor = crew.some(e => e.trait === 'mentor');
+          crew.forEach(e => gainXp(c, e, p.reqs, ledgers, mentor && e.trait !== 'mentor' ? 2 : 1));
         } else if (team.length) {
           L(c, `「${p.name}」スキル不足で進まず`, 'bad');
         } else {
@@ -813,6 +848,9 @@ export function resolveDev(g: Game) {
       if (p.progress >= p.work) completeProject(g, c, p, team, ledgers, headlines);
     }
 
+    // リファクタ魔：担当した期に負債−1（1人につき1）
+    const refactor = c.engineers.filter(e => e.trait === 'refactor' && working(g, e) && slots(e.assign).length).length;
+    if (refactor && c.debt > 0) { const v = Math.min(c.debt, refactor); c.debt -= v; L(c, `🧹 リファクタ魔のおかげで負債−${v}`, 'good'); }
     // 13. サービス
     if (c.service) {
       const power = servicePower(g, c, undefined, true);
@@ -941,6 +979,19 @@ export function resolveDev(g: Game) {
       stamp: { type: 'trophy', text: winners.length ? `${winners.map(c => c.name).join('・')} 優勝` : '優勝なし', tone: 'gold' },
     });
   }
+  if (season(q) === 3) {
+    const lines: RevealLine[] = [];
+    g.companies.forEach(c => {
+      for (const e of [...c.engineers]) {
+        if (e.trait !== 'hopper' || !chance(g, TRAIT.hopperQuit)) continue;
+        c.engineers = c.engineers.filter(x => x !== e);
+        if (c.sleeper?.engineerId === e.id) c.sleeper = null;
+        const owner = e.loan ? companyOf(g, e.loan.from) : null;
+        lines.push({ text: `${e.name}（${c.name}${owner ? `・${owner.name}から借りていた` : ''}）が転職していった…`, tone: 'bad' });
+      }
+    });
+    if (lines.length) blocks.push({ kind: 'season', icon: '🏃', title: '転職癖の社員が退職', lines, stamp: { type: 'loss', text: '退職', tone: 'bad' } });
+  }
   if (season(q) === 3 && (g.funds || []).length) {
     const lines: RevealLine[] = [];
     for (const f of g.funds!) {
@@ -951,9 +1002,15 @@ export function resolveDev(g: Game) {
     g.companies.forEach(c => {
       if (!c.invest?.length) return;
       let total = 0, paid = 0;
+      let lucky = c.engineers.some(e => e.trait === 'investor');
       for (const h of c.invest) {
         const f = g.funds!.find(x => x.id === h.fund);
-        const back = round10(h.amount * (f?.mult ?? 1));
+        let m = f?.mult ?? 1;
+        if (lucky && f) {
+          const ms = [...new Set(FUNDS[f.kind].outcomes.map(o => o[0]))].sort((a, b) => a - b);
+          if (m === ms[0] && ms.length > 1) { m = ms[1]; lucky = false; lines.push({ text: `🔮 ${c.name}：投資の勘で ${f.name} の損を回避（×${f.mult}→×${m}）`, tone: 'good' }); }
+        }
+        const back = round10(h.amount * m);
         total += back; paid += h.amount;
       }
       c.cash += total;
@@ -1000,6 +1057,7 @@ export function resolveDev(g: Game) {
 /** 支払いから取り分・持ち出しを引いて入金する。実際の入金額を返す */
 function payout(g: Game, c: Company, p: ActiveProject, team: Engineer[], gross: number, ledgers: Record<string, Ledger>) {
   gross = round10(gross * payFactor(c, p.type));   // 業種による受け取り倍率
+  if (team.some(e => e.trait === 'sales' && working(g, e))) gross = round10(gross * TRAIT.salesMult);   // 営業上手
   let net = gross;
   for (const e of team) {
     if (e.loan) {
@@ -1059,7 +1117,7 @@ function completeProject(g: Game, c: Company, p: ActiveProject, team: Engineer[]
   if (p.type === 'ai') { c.aiKnowhow++; lg.lines.push({ text: `AIノウハウ+1（計${c.aiKnowhow}）`, tone: 'good' }); }
   c.completed++;
   c.projects = c.projects.filter(x => x !== p);
-  c.engineers.forEach(e => { if (e.assign === p.id) e.assign = null; });
+  c.engineers.forEach(e => { if (hasSlot(e.assign, p.id)) e.assign = slots(e.assign).filter(t => t !== p.id).join('+') || null; });
   log(g, `${c.name}：「${p.name}」完了`);
 }
 

@@ -1,7 +1,7 @@
 // ===== ゲーム画面 =====
 import { useEffect, useMemo, useState } from 'react';
 import { CARDS, GAME, HAPPENINGS, PROJECT_TYPES, SEASONS, SERVICE } from '../logic/config';
-import { payroll, projectCheck, quarterLabel, salaryMult, season, serviceIncome, totalQ, totalYears, working, yen } from '../logic/calc';
+import { payroll, projectCheck, quarterLabel, salaryMult, season, serviceIncome, slots, totalQ, totalYears, working, yen } from '../logic/calc';
 import { defaultDev, emptyBid } from '../logic/game';
 import type { ActiveProject, BidSubmit, Company, DevSubmit, Engineer, Game as G } from '../logic/types';
 import type { PlayerView } from '../logic/view';
@@ -9,7 +9,7 @@ import { phaseKey, type ChatMsg } from '../shared/protocol';
 import { BidTab, CardDetail, CardTile } from './BidTab';
 import { IndustryChip, IndustryDetail } from './Industry';
 import { VoiceBubble, setVoice, voiceOn } from './Voice';
-import { DevTab, EngBadges, ProjectSkillSheet, XpLine, devSummary } from './DevTab';
+import { DevTab, EngBadges, ProjectSkillSheet, TraitLine, XpLine, devSummary } from './DevTab';
 import { sfx, setSound, soundOn } from './fx/sound';
 import type { Snapshot } from './session';
 import { CountUp, Face, LogoMark, Sheet, SkillChips, Sparkline, companyColor, useLongPress } from './ui';
@@ -165,9 +165,10 @@ function MeTab({ v, me }: { v: PlayerView; me: Company }) {
   const [proj, setProj] = useState<string | null>(null);
   // 社員の担当：案件／サービス／空き（入札フェーズでは前の期の担当がそのまま次の開発の初期値）
   const placeOf = (e: Engineer): { kind: 'proj' | 'svc' | 'free'; label: string } => {
-    const p = e.assign && e.assign !== 'svc' ? me.projects.find(x => x.id === e.assign) : null;
-    if (p) return { kind: 'proj', label: `🛠️ ${p.name}` };
-    if (e.assign === 'svc' && me.service) return { kind: 'svc', label: '🚀 サービス' };
+    const ps = slots(e.assign).map(t => me.projects.find(x => x.id === t)).filter(Boolean);
+    const svc = slots(e.assign).includes('svc') && !!me.service;
+    if (ps.length) return { kind: 'proj', label: `🛠️ ${ps.map(p => p!.name).join('＋')}${svc ? '＋サービス' : ''}` };
+    if (svc) return { kind: 'svc', label: '🚀 サービス' };
     return { kind: 'free', label: '☕ 空き' };
   };
   const order = { free: 0, proj: 1, svc: 2 };
@@ -197,7 +198,7 @@ function MeTab({ v, me }: { v: PlayerView; me: Company }) {
       {sortedStaff.map(e => (
         <div className={`eng ${placeOf(e).kind === 'free' ? 'free' : ''}`} key={e.id}><Face name={e.name} /><div className="grow">
           <div className="row" style={{ gap: 5, flexWrap: 'wrap' }}><span className="nm">{e.name}</span><span className={`badge-k place ${placeOf(e).kind}`}>{placeOf(e).label}</span><EngBadges g={g} e={e} me={me} /></div>
-          <div style={{ marginTop: 4 }}><SkillChips skills={e.skills} /></div><XpLine e={e} /><div className="sal">給料 {e.salary}</div></div></div>
+          <div style={{ marginTop: 4 }}><SkillChips skills={e.skills} /></div><XpLine e={e} /><TraitLine e={e} /><div className="sal">給料 {e.salary}</div></div></div>
       ))}
       {g.companies.flatMap(c => c.engineers.filter(e => e.loan?.from === me.id).map(e => (
         <div className="eng" key={e.id} style={{ opacity: .75 }}><Face name={e.name} /><div className="grow"><span className="nm">{e.name}</span> <span className="badge-k rent">{c.name}に貸し出し中</span><div className="sal">給料 {e.salary}（自社負担）</div></div></div>

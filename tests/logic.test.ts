@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGame, defaultDev, emptyBid, resolveBid, resolveDev, submit, tryResolve } from '../src/logic/game';
+import { createGame, defaultDev, emptyBid, grantTrait, resolveBid, resolveDev, submit, tryResolve } from '../src/logic/game';
 import { viewFor } from '../src/logic/view';
 import { projectCheck } from '../src/logic/calc';
 import type { ActiveProject, BidSubmit, Company, Engineer, Game, Project } from '../src/logic/types';
@@ -390,5 +390,71 @@ describe('投資', () => {
     expect(co(g, 'a').invest).toEqual([]);
     expect(block!.lines.some(l => l.text.includes(`投資1,000 → ${(Math.round(1000 * f.mult! / 10) * 10).toLocaleString()}`))).toBe(true);
     expect(co(g, 'a').cash).not.toBe(cashBefore);
+  });
+});
+
+describe('特技', () => {
+  const setup = () => {
+    const g = two(); cleanHands(g);
+    g.q = 0; g.phase = 'dev';
+    const a = co(g, 'a');
+    a.engineers = []; a.projects = []; a.cash = 0; a.debt = 0;
+    co(g, 'b').engineers = [];
+    return { g, a };
+  };
+  it('掛け持ち：2つの案件に同時に入れる（掛け持ちでない社員は1つだけ）', () => {
+    const { g, a } = setup();
+    a.engineers = [eng('m', { BE: 2 }, { trait: 'multi' }), eng('n', { BE: 2 })];
+    a.projects = [active('p1', 100, { BE: 2 }, { work: 3 }), active('p2', 100, { BE: 2 }, { work: 3 })];
+    const s = defaultDev(g, 'a');
+    s.assign = { m: 'p1+p2', n: 'p1+p2' };
+    submit(g, 'a', s);
+    expect(g.devSubs.a.assign).toEqual({ m: 'p1+p2', n: '' });
+    submit(g, 'b', defaultDev(g, 'b'));
+    resolveDev(g);
+    expect(a.projects.map(p => p.progress)).toEqual([1, 1]);
+  });
+  it('リーダー：ほかのメンバーのスキル+1。火消し職人：遅れた案件でスキル+1', () => {
+    const { g, a } = setup();
+    a.engineers = [eng('l', { FE: 1 }, { trait: 'leader', assign: 'p1' }), eng('x', { BE: 2 }, { assign: 'p1' }), eng('f', { IN: 2 }, { trait: 'fire', assign: 'p2' })];
+    a.projects = [active('p1', 100, { BE: 3 }, { work: 3 }), active('p2', 100, { IN: 3 }, { work: 3, deadline: -1 })];
+    devOnly(g);
+    expect(a.projects.map(p => p.progress)).toEqual([1, 1]);
+  });
+  it('夜型：突貫しても負債が増えない。営業上手：受け取り×1.1。リファクタ魔：負債−1', () => {
+    const { g, a } = setup();
+    a.engineers = [eng('n', { BE: 3 }, { trait: 'night', assign: 'p1' }), eng('r', { IN: 1 }, { trait: 'refactor', assign: 'svc' })];
+    a.service = { level: 0 };
+    a.debt = 2;
+    a.projects = [active('p1', 100, { BE: 1 }, { work: 3 })];
+    devOnly(g, (c, s) => { if (c.id === 'a') s.rush = ['p1']; });
+    expect(a.projects.find(p => p.id === 'p1')!.progress).toBe(2);
+    expect(a.debt).toBe(1);   // 突貫の負債なし、リファクタ魔で−1
+    const s2 = setup();
+    s2.a.engineers = [eng('s', { FE: 3 }, { trait: 'sales', assign: 'p2' })];
+    s2.a.projects = [active('p2', 1000, { FE: 1 }, { work: 1 })];
+    devOnly(s2.g);
+    expect(s2.g.reveal!.blocks.some(b => b.lines.some(l => l.text.includes('「p2」完了！ +1100')))).toBe(true);
+  });
+  it('薄給は給料半分、天才肌・転職癖はスキル+1', () => {
+    const e1 = eng('a', { BE: 2 }, { salary: 60 }); grantTrait(e1, 'cheap'); expect(e1.salary).toBe(30);
+    const e2 = eng('b', { BE: 2, FE: 5 }, { salary: 90 }); grantTrait(e2, 'genius'); expect(e2.skills).toEqual({ BE: 3, FE: 5 }); expect(e2.salary).toBe(100);
+  });
+  it('転職癖は冬に辞めることがある・投資の勘は最悪の結果を1段階よくする', () => {
+    let quit = false, saved = false;
+    for (let seed = 1; seed < 200 && !(quit && saved); seed++) {
+      const g = createGame([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], seed, 'x', 12, false);
+      cleanHands(g);
+      g.q = 3; g.phase = 'dev';
+      const a = co(g, 'a');
+      a.engineers = [eng('h', { BE: 1 }, { trait: 'hopper' }), eng('i', { BE: 1 }, { trait: 'investor' })];
+      const fund = { id: 'f1', kind: 'angel' as const, name: 'テスト' } as { id: string; kind: 'angel'; name: string; mult?: number };
+      g.funds = [fund];
+      a.invest = [{ fund: 'f1', amount: 1000 }];
+      devOnly(g);
+      if (!a.engineers.some(e => e.id === 'h')) quit = true;
+      if (fund.mult === 0 && g.reveal!.blocks.some(b => b.lines.some(l => l.text.includes('投資1,000 → 500')))) saved = true;
+    }
+    expect({ quit, saved }).toEqual({ quit: true, saved: true });
   });
 });

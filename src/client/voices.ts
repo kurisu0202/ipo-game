@@ -2,8 +2,8 @@
 //  見た目だけの演出。ゲームの結果には影響しない。
 //  {name}=本人の名字 {co}=自社名 {proj}=担当案件 {rival}=ライバル社名 {skill}=得意スキル {boss}=社長
 import { SKILL_NAME } from '../logic/config';
-import { projectCheck, season, totalQ, working } from '../logic/calc';
-import type { ActiveProject, Company, Engineer, Game, HappeningKey, IndustryKey, Skill } from '../logic/types';
+import { hasSlot, projectCheck, season, slots, totalQ, working } from '../logic/calc';
+import type { ActiveProject, Company, Engineer, Game, HappeningKey, IndustryKey, Skill, TraitKey } from '../logic/types';
 
 interface Ctx { g: Game; me: Company; e: Engineer; proj?: ActiveProject; top: Skill | null }
 interface Rule { w: number; when: (x: Ctx) => boolean; lines: (x: Ctx) => string[] }
@@ -143,6 +143,21 @@ const FIRST = ['いよいよ創業ですね！', '{co}の歴史が今始まる',
 const LAST = ['いよいよ最後の期ですね…', '上場まであと少し！🔔', '最後まで走り切りましょう', 'ここで逆転できるかも'];
 const TRAINED = ['研修、めちゃくちゃ勉強になりました📚', '研修で覚えたこと、早く使いたい！', '研修の資格試験、受かりました🎉', '研修先のお弁当がおいしかった', '頭がパンパンです…でも成長した気がする', '研修のおかげで視野が広がりました'];
 const INVESTING = ['社長、{fund}に入れたって本当ですか…？', '{fund}のチャート、毎朝見てます📈', '投資の結果、冬までドキドキですね', '{fund}、ニュースで話題になってました', '本業もがんばりましょうね…？', '株価アプリ、通知切れません'];
+const TRAIT_LINES: Record<TraitKey, string[]> = {
+  multi: ['2つ同時進行、余裕です🔀', 'タブを100個開いてても平気です', '並行作業こそ我が人生'],
+  fast: ['もう終わりました⚡', '速さは正義', 'え、今日の分？ 午前中に終わりました'],
+  fire: ['炎上案件？ 燃えてきた🧯', '修羅場ほど落ち着くんですよね', '遅れてる案件、こっちに回してください'],
+  night: ['夜のほうが集中できるんです🌙', '朝はちょっと…', '深夜2時のコードが一番キレてる'],
+  refactor: ['このコード、きれいにしておきました🧹', '負債を見ると片付けたくなる', '変数名、全部直しました'],
+  leader: ['みんな、いける！👑', 'チームで勝ちましょう', '困ったらまず相談してね'],
+  mentor: ['わからないところ、一緒に見ようか🎓', '質問は大歓迎です', '教えるのが一番の勉強'],
+  mood: ['今日もみんな元気ですね〜😄', 'おやつ買ってきました！', '笑顔が一番の生産性向上策'],
+  sales: ['お客さん、もう少し出してくれそうです🤝', '値段交渉なら任せてください', '名刺、もう1000枚配りました'],
+  cheap: ['お給料？ そんなにいらないです🍙', 'おにぎりがあれば働けます', '好きなことできれば満足です'],
+  investor: ['この相場、なんとなくわかるんですよね🔮', 'チャートが語りかけてくる', '損切りは早めがコツです'],
+  genius: ['今日は…気分じゃない🌟', 'ひらめいた！ 3日分終わりました', '天才は気まぐれなんです'],
+  hopper: ['転職サイトから連絡が…いや、なんでもないです🏃', 'ここ、居心地いいですね（今は）', 'キャリアは自分で作るものです'],
+};
 const GROW = ['もうすぐ{skill}がレベルアップしそうです📈', '最近、手応えあります', '成長してる実感があります'];
 
 // ---------- 業種 ----------
@@ -159,13 +174,13 @@ const RULES: Rule[] = [
   R(3, always, GENERAL),
   R(3, x => x.g.phase === 'bid', BID),
   R(3, x => x.g.phase === 'dev', DEV),
-  R(6, x => !x.e.assign && working(x.g, x.e), IDLE),
+  R(6, x => !slots(x.e.assign).length && working(x.g, x.e), IDLE),
   R(5, x => !!x.proj, ON_PROJ),
   R(9, x => !!x.proj && !projectCheck(x.g, x.me, x.proj).ok, SHORT),
   R(12, x => !!x.proj && x.g.q > x.proj.deadline, LATE),
   R(10, x => !!x.proj && x.g.q === x.proj.deadline, DUE),
   R(6, x => !!x.proj && x.proj.work - x.proj.progress === 1, DONE_SOON),
-  R(6, x => x.e.assign === 'svc' && !!x.me.service, SVC),
+  R(6, x => hasSlot(x.e.assign, 'svc') && !!x.me.service, SVC),
   R(8, x => !!x.e.rookie, ROOKIE),
   R(8, x => !!x.e.legend, LEGEND),
   R(6, x => !!x.e.loan, RENTED),
@@ -174,6 +189,7 @@ const RULES: Rule[] = [
   R(30, x => !working(x.g, x.e), REST),
   R(25, x => x.e.trainedQ !== undefined && x.g.q - x.e.trainedQ <= 2, TRAINED),
   R(5, x => !!x.me.invest?.length, INVESTING),
+  R(7, x => !!x.e.trait, x => TRAIT_LINES[x.e.trait!]),
   R(4, x => !!x.top, x => SKILL_LINES[x.top!]),
   R(3, always, x => SEASON_LINES[season(x.g.q)]),
   R(4, always, x => HAP_LINES[x.g.happenings[x.g.q]] || []),
@@ -195,7 +211,7 @@ export function pickVoice(g: Game, me: Company, recent: string[]): { e: Engineer
   const staff = me.engineers;
   if (!staff.length) return null;
   const e = staff[Math.floor(Math.random() * staff.length)];
-  const proj = e.assign && e.assign !== 'svc' ? me.projects.find(p => p.id === e.assign) : undefined;
+  const proj = me.projects.find(p => hasSlot(e.assign, p.id));
   const top = (Object.entries(e.skills) as [Skill, number][]).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
   const x: Ctx = { g, me, e, proj, top };
   const pool: { w: number; lines: string[] }[] = [];
@@ -222,4 +238,4 @@ export function pickVoice(g: Game, me: Company, recent: string[]): { e: Engineer
 
 /** せりふの総数 */
 export const VOICE_COUNT = [GENERAL, BID, DEV, IDLE, ON_PROJ, SHORT, LATE, DUE, DONE_SOON, SVC, ROOKIE, LEGEND, RENTED, HH, WHISPER, REST, RICH, POOR, NEG, DEBT, REP, FIRST, LAST, GROW, TRAINED, INVESTING,
-  ...Object.values(SKILL_LINES), ...SEASON_LINES, ...Object.values(HAP_LINES), ...Object.values(INDUSTRY_LINES)].reduce((t, a) => t + (a?.length || 0), 0);
+  ...Object.values(SKILL_LINES), ...Object.values(TRAIT_LINES), ...SEASON_LINES, ...Object.values(HAP_LINES), ...Object.values(INDUSTRY_LINES)].reduce((t, a) => t + (a?.length || 0), 0);

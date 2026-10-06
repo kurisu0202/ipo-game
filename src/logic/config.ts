@@ -2,7 +2,7 @@
 //  3年で上場 ― 数値設定（バランス調整はこのファイルだけで行う）
 //  金額の単位はすべて「万円」、期間の単位は「期」（四半期）
 // =====================================================================
-import type { CardKey, FundKind, IndustryKey, HappeningKey, ProjectType, Skill, SpyOrder, Tag } from './types';
+import type { CardKey, FundKind, IndustryKey, TraitKey, HappeningKey, ProjectType, Skill, SpyOrder, Tag } from './types';
 
 export const SKILLS: Skill[] = ['FE', 'BE', 'IN', 'DE', 'SE', 'AI'];
 export const SKILL_NAME: Record<Skill, string> = { FE: 'フロント', BE: 'バック', IN: 'インフラ', DE: 'デザイン', SE: 'セキュリティ', AI: 'AI' };
@@ -237,4 +237,27 @@ export const FUNDS: Record<FundKind, FundSpec> = {
     names: ['量子コイン', 'ワンワンコイン🐕', 'メタバース土地トークン', 'ラーメン本位制コイン'] },
   angel: { label: '未公開株', icon: '🎲', risk: 5, desc: 'ほとんどは消える。ごくまれに10倍', outcomes: [[0, 6], [0.5, 2], [3, 2], [10, 0.6]],
     names: ['社長の友人の新事業', 'ウワサの未上場ベンチャー', '謎の情報商材会社', '地下アイドル運営会社'] },
+};
+
+// ---------- 特技（たまに採用市場にいる・研修でたまに目覚める。1人1つまで） ----------
+export interface TraitSpec { name: string; icon: string; rarity: 1 | 2 | 3; desc: string; group: string }
+export const TRAITS: Record<TraitKey, TraitSpec> = {
+  multi: { name: '掛け持ち', icon: '🔀', rarity: 3, group: '働き方', desc: '1期に2つの担当（案件・サービス）を同時にこなせる。どちらにもスキルが入る' },
+  fast: { name: '爆速', icon: '⚡', rarity: 3, group: '働き方', desc: '担当した案件が、突貫しなくても30%で2進む（負債なし）' },
+  fire: { name: '火消し職人', icon: '🧯', rarity: 2, group: '働き方', desc: '納期遅れの案件・炎上火消しを担当すると、持っているスキルがすべて+1' },
+  night: { name: '夜型', icon: '🌙', rarity: 2, group: '働き方', desc: '担当した案件を突貫工事しても、負債が増えない' },
+  refactor: { name: 'リファクタ魔', icon: '🧹', rarity: 2, group: '働き方', desc: '案件かサービスを担当した期に、会社の負債−1' },
+  leader: { name: 'リーダー', icon: '👑', rarity: 3, group: 'チーム', desc: '同じ案件のほかのメンバーの、持っているスキルがそれぞれ+1' },
+  mentor: { name: '教え上手', icon: '🎓', rarity: 2, group: 'チーム', desc: '同じ案件のほかのメンバーに入る経験値が2倍' },
+  mood: { name: 'ムードメーカー', icon: '😄', rarity: 1, group: 'チーム', desc: '会社にいるだけで、インフルエンザで休む人が出ない。天才肌の気まぐれも半分に' },
+  sales: { name: '営業上手', icon: '🤝', rarity: 2, group: 'お金', desc: '担当した案件の受け取り×1.1' },
+  cheap: { name: '薄給でOK', icon: '🍙', rarity: 1, group: 'お金', desc: '給料が半分' },
+  investor: { name: '投資の勘', icon: '🔮', rarity: 2, group: 'お金', desc: '会社の投資で一番悪い結果が出たとき、1年に1回だけ1段階よい結果になる' },
+  genius: { name: '天才肌', icon: '🌟', rarity: 3, group: 'クセあり', desc: 'スキルがすべて+1。ただし毎期20%で気分が乗らずに休む' },
+  hopper: { name: '転職癖', icon: '🏃', rarity: 2, group: 'クセあり', desc: 'スキルがすべて+1。ただし毎年冬の決算で30%の確率で辞めてしまう' },
+};
+export const TRAIT = {
+  market: 0.18, rookie: 0.08, legend: 0.35, train: 0.15,   // 特技を持っている／目覚める確率
+  rarityWeight: { 1: 3, 2: 2, 3: 1 } as Record<1 | 2 | 3, number>,
+  fastChance: 0.3, geniusRest: 0.2, hopperQuit: 0.3, salesMult: 1.1,
 };

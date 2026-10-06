@@ -1,5 +1,5 @@
 // ===== 計算ヘルパー（解決処理と画面の両方で使う） =====
-import { GAME, INDUSTRIES, INDUSTRY_BID, INDUSTRY_HIRE_BONUS, RUSH_DEBT, SERVICE, SKILLS } from './config';
+import { GAME, GROWTH, INDUSTRIES, INDUSTRY_BID, INDUSTRY_HIRE_BONUS, RUSH_DEBT, SERVICE, SKILLS } from './config';
 import type { ActiveProject, Company, Engineer, Game, ProjectType, Skill, Skills } from './types';
 
 /** このゲームの全期数と年数 */
@@ -49,13 +49,45 @@ export function checkReqs(reqs: Skills, sums: Skills): Check {
   return { sums, ok: short === 0, missing, short };
 }
 
+/** 担当先（「掛け持ち」の社員は 'p1+p2' のように2つ持てる） */
+export const slots = (v?: string | null) => (v ? v.split('+').filter(Boolean) : []);
+export const hasSlot = (v: string | null | undefined, t: string) => slots(v).includes(t);
+/** 担当先のオン／オフ。掛け持ちなら2つまで（3つ目は古いほうと入れ替え） */
+export function toggleSlot(e: Engineer, cur: string, target: string, on: boolean): string {
+  const s = slots(cur).filter(x => x !== 'fire' && x !== 'train');
+  if (!on) return s.filter(x => x !== target).join('+');
+  if (s.includes(target)) return s.join('+');
+  if (e.trait === 'multi' && s.length >= 1) return [s[s.length - 1], target].join('+');
+  return target;
+}
+
 /** 案件の担当者（assign マップを渡すとその割り当てで計算） */
 export function assignees(c: Company, target: string, assign?: Record<string, string>): Engineer[] {
-  return c.engineers.filter(e => (assign ? (assign[e.id] ?? (e.assign || '')) : e.assign) === target);
+  return c.engineers.filter(e => hasSlot(assign ? (assign[e.id] ?? (e.assign || '')) : e.assign, target));
+}
+
+/** 案件の担当チームのスキル合計（リーダー・火消し職人の効果込み） */
+export function projectSums(g: Game, c: Company, p: ActiveProject, team: Engineer[], real = false): Skills {
+  const out = sumSkills(g, c, team, real);
+  const on = team.filter(e => working(g, e));
+  const leader = on.find(e => e.trait === 'leader');
+  const late = g.q > p.deadline || p.type === 'fire';
+  for (const e of on) {
+    const s = effSkills(g, c, e, real);
+    const plus = (leader && leader !== e ? 1 : 0) + (late && e.trait === 'fire' ? 1 : 0);
+    if (!plus) continue;
+    for (const k of SKILLS) if (s[k]) out[k] = (out[k] || 0) + plus;
+  }
+  return out;
 }
 
 export function projectCheck(g: Game, c: Company, p: ActiveProject, assign?: Record<string, string>, real = false): Check {
-  return checkReqs(p.reqs, sumSkills(g, c, assignees(c, p.id, assign), real));
+  return checkReqs(p.reqs, projectSums(g, c, p, assignees(c, p.id, assign), real));
+}
+
+/** 特技で持っているスキルを+1（天才肌・転職癖） */
+export function boostAll(e: Engineer) {
+  for (const k of SKILLS) if (e.skills[k]) e.skills[k] = Math.min(GROWTH.maxSkill, (e.skills[k] || 0) + 1);
 }
 
 export function serviceNeed(c: Company) {

@@ -1,7 +1,7 @@
 // ===== 開発タブ =====
 import { useState } from 'react';
-import { ABANDON, FUNDS, GROWTH, INVEST, INVESTIGATE_COST, TRAINING, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS, xpNeed } from '../logic/config';
-import { assignees, effSkills, launchCost, projectCheck, quarterLabel, rushDebt, season, serviceIncome, servicePower, skillSum, sumSkills, totalQ, working } from '../logic/calc';
+import { ABANDON, FUNDS, GROWTH, INVEST, INVESTIGATE_COST, TRAINING, TRAITS, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS, xpNeed } from '../logic/config';
+import { assignees, effSkills, hasSlot, launchCost, projectCheck, quarterLabel, rushDebt, season, serviceIncome, servicePower, skillSum, slots, sumSkills, toggleSlot, totalQ, working } from '../logic/calc';
 import { abandonFee, canTrain, pendingSpies } from '../logic/game';
 import type { ActiveProject, Company, DevSubmit, Engineer, Game, Skill, SpyOrder } from '../logic/types';
 import type { PlayerView } from '../logic/view';
@@ -106,6 +106,7 @@ export function DevTab({ v, me, draft, set, locked }: P) {
                   <div className="row" style={{ gap: 5, flexWrap: 'wrap' }}><span className="nm">{e.name}</span><EngBadges g={g} e={e} me={me} /></div>
                   <div style={{ marginTop: 4 }}><SkillChips skills={e.skills} /></div>
                   <XpLine e={e} />
+                  <TraitLine e={e} />
                   <div className="sal">給料 {e.salary}{e.loan ? '（貸し手が負担）' : ''}・{placeName(me, assign[e.id] ?? '')}</div>
                 </div>
                 {!e.loan && <button className={`btn xs ${fire ? 'danger' : ''}`} disabled={locked} onClick={() => { sfx.tap(); setAssign(e.id, fire ? '' : 'fire'); }}>{fire ? '解雇取消' : '解雇'}</button>}
@@ -117,7 +118,7 @@ export function DevTab({ v, me, draft, set, locked }: P) {
       </details>
 
       {sheet && <AssignSheet g={g} me={me} target={sheet} assign={assign} locked={locked}
-        onToggle={(eid, on) => { sfx.tap(); setAssign(eid, on ? sheet : ''); }} onClose={() => setSheet(null)} />}
+        onToggle={(eid, on) => { sfx.tap(); const e = me.engineers.find(x => x.id === eid)!; setAssign(eid, toggleSlot(e, assign[eid] ?? '', sheet, on)); }} onClose={() => setSheet(null)} />}
     </div>
   );
 }
@@ -125,9 +126,8 @@ export function DevTab({ v, me, draft, set, locked }: P) {
 export function placeName(me: Company, a: string) {
   if (a === 'fire') return '解雇予定';
   if (a === 'train') return '研修';
-  if (a === 'svc') return 'サービス担当';
   if (!a) return '待機';
-  return `「${me.projects.find(p => p.id === a)?.name || '案件'}」担当`;
+  return slots(a).map(t => (t === 'svc' ? 'サービス担当' : `「${me.projects.find(p => p.id === t)?.name || '案件'}」担当`)).join('＋');
 }
 
 /** 投資：今年の候補にお金を入れる。結果は冬の決算で */
@@ -220,6 +220,13 @@ function TrainCard({ g, me, draft, locked, onTrain, onCancel }: {
   );
 }
 
+/** 特技の説明（例：🔀 掛け持ち：1期に2つ…） */
+export function TraitLine({ e }: { e: Engineer }) {
+  if (!e.trait) return null;
+  const t = TRAITS[e.trait];
+  return <div className={`trait-line r${t.rarity}`}>{t.icon} <b>{t.name}</b>{'★'.repeat(t.rarity)}：{t.desc}</div>;
+}
+
 /** 経験値の進み具合（例：📈 バック 2/4） */
 export function XpLine({ e }: { e: Engineer }) {
   const list = SKILLS.filter(k => (e.skills[k] || 0) > 0 && (e.skills[k] || 0) < GROWTH.maxSkill)
@@ -233,6 +240,7 @@ export function EngBadges({ g, e, me }: { g: Game; e: Engineer; me?: Company }) 
   const lender = e.loan ? g.companies.find(c => c.id === e.loan!.from) : null;
   return (
     <>
+      {e.trait && <span className={`badge-k trait r${TRAITS[e.trait].rarity}`} title={TRAITS[e.trait].desc}>{TRAITS[e.trait].icon}{TRAITS[e.trait].name}</span>}
       {e.legend && <span className="badge-k legend">伝説</span>}
       {e.rookie && <span className="badge-k rookie">新人</span>}
       {e.loan && <span className="badge-k rent">{lender?.name}から{quarterLabel(e.loan.until)}まで</span>}
@@ -250,7 +258,7 @@ export function EngBadges({ g, e, me }: { g: Game; e: Engineer; me?: Company }) 
 export function ProjectSkillSheet({ g, me, p, onClose }: { g: Game; me: Company; p: ActiveProject; onClose: () => void }) {
   const chk = projectCheck(g, me, p);
   const team = assignees(me, p.id);
-  const free = me.engineers.filter(e => !e.assign && working(g, e));
+  const free = me.engineers.filter(e => !slots(e.assign).length && working(g, e));
   const freeSum = sumSkills(g, me, free);
   const allSum = sumSkills(g, me, me.engineers);
   const rows = SKILLS.filter(k => p.reqs[k]).map(k => {
@@ -261,8 +269,8 @@ export function ProjectSkillSheet({ g, me, p, onClose }: { g: Game; me: Company;
           : { t: `社員全員でも${need - (allSum[k] || 0)}不足`, c: 'down' };
     return { k, need, have, free: freeSum[k] || 0, all: allSum[k] || 0, status };
   });
-  const place = (e: Engineer) => (e.assign === 'svc' ? 'サービス' : e.assign ? me.projects.find(x => x.id === e.assign)?.name || '案件' : '空き');
-  const holders = (k: Skill) => me.engineers.filter(e => (e.skills[k] || 0) > 0 && e.assign !== p.id);
+  const place = (e: Engineer) => (slots(e.assign).length ? slots(e.assign).map(t => (t === 'svc' ? 'サービス' : me.projects.find(x => x.id === t)?.name || '案件')).join('＋') : '空き');
+  const holders = (k: Skill) => me.engineers.filter(e => (e.skills[k] || 0) > 0 && !hasSlot(e.assign, p.id));
   return (
     <Sheet onClose={onClose} title={<>{PROJECT_TYPES[p.type].icon} {p.name}</>}
       sub={chk.ok ? '✓ 今の担当のままなら、次の開発フェーズで進みます' : team.length ? `⚠ 今の担当では ${missingText(chk.missing)} 足りません` : '⚠ まだ担当者がいません（開発フェーズで割り当て）'}>
@@ -474,12 +482,13 @@ function AssignSheet({ g, me, target, assign, locked, onToggle, onClose }: {
   const svcNeed = 3 + (me.service?.level || 0);
   const svcPower = servicePower(g, me, assign);
   const rows = me.engineers.filter(e => assign[e.id] !== 'fire').map(e => {
-    const on = (assign[e.id] ?? '') === target;
+    const on = hasSlot(assign[e.id] ?? '', target);
     const cur = assign[e.id] ?? '';
+    const next = toggleSlot(e, cur, target, true);
     let label: 'full' | 'part' | 'none' = 'none';
     let gain = 0;
     if (!on) {
-      const a2 = { ...assign, [e.id]: target };
+      const a2 = { ...assign, [e.id]: next };
       if (proj) {
         const after = check(a2)!;
         gain = (now?.short || 0) - after.short;
@@ -491,9 +500,10 @@ function AssignSheet({ g, me, target, assign, locked, onToggle, onClose }: {
       }
     }
     let warn = '';
-    if (!on && cur && cur !== 'svc' && cur !== target) {
-      const other = me.projects.find(p => p.id === cur);
-      if (other && projectCheck(g, me, other, assign).ok && !projectCheck(g, me, other, { ...assign, [e.id]: target }).ok) warn = `移すと「${other.name}」が進まなくなります`;
+    for (const t of slots(cur)) {
+      if (on || t === 'svc' || hasSlot(next, t)) continue;
+      const other = me.projects.find(p => p.id === t);
+      if (other && projectCheck(g, me, other, assign).ok && !projectCheck(g, me, other, { ...assign, [e.id]: next }).ok) warn = `移すと「${other.name}」が進まなくなります`;
     }
     return { e, on, label, gain, warn, cur };
   });
@@ -516,7 +526,8 @@ function AssignSheet({ g, me, target, assign, locked, onToggle, onClose }: {
                 {on ? <span className="lbl full">担当中</span> : label === 'full' ? <span className="lbl full">これで足りる！</span> : label === 'part' ? <span className="lbl part">不足を{gain}埋める</span> : <span className="lbl none">効果なし</span>}
               </div>
               <div style={{ marginTop: 4 }}><SkillChips skills={effSkills(g, me, e)} highlight={proj ? Object.fromEntries(SKILLS.filter(k => proj.reqs[k] && e.skills[k]).map(k => [k, 'ok'])) : undefined} /></div>
-              <div className="note">{usable ? `いま：${placeName(me, cur)}` : '今期はお休み'}</div>
+              <div className="note">{usable ? `いま：${placeName(me, cur)}` : '今期はお休み'}{e.trait === 'multi' && usable ? '（🔀掛け持ちで2つまで担当できます）' : ''}</div>
+              {e.trait && <TraitLine e={e} />}
               {warn && <div className="note down">⚠ {warn}</div>}
             </div>
           </button>

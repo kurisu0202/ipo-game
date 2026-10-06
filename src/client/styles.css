@@ -543,3 +543,9 @@ details.fold.secret > summary { color: var(--down); }
 .fund + .fund { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line2); }
 .fund .risk { color: var(--down); font-size: 12px; letter-spacing: -1px; }
 .fund .risk span { color: var(--line2); }
+.badge-k.trait { background: var(--blue-bg); color: var(--blue); }
+.badge-k.trait.r3 { background: linear-gradient(135deg, #ffe08a, #f5b316); color: #3a2200; }
+.trait-line { margin-top: 4px; font-size: 12px; line-height: 1.45; padding: 4px 8px; border-radius: 8px; background: var(--blue-bg); color: var(--ink); }
+.trait-line.r3 { background: var(--gold-bg); }
+.trait-line b { color: var(--blue); }
+.trait-line.r3 b { color: var(--gold); }
