@@ -287,7 +287,8 @@ details.fold.secret > summary { color: var(--down); }
 .member .tagx { font-size: 10px; font-weight: 900; padding: 1px 6px; border-radius: 5px; background: var(--blue-bg); color: var(--blue); }
 .member .tagx.spy { background: var(--down-bg); color: var(--down); }
 .member .tagx.ok { background: var(--up-bg); color: var(--up); }
-.face { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 900; font-size: 13px; flex: none; }
+.face { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; flex: none; overflow: hidden; box-shadow: 0 0 0 1.5px var(--card), 0 1px 3px rgba(0, 0, 0, .18); }
+.face .avatar { display: block; }
 .rush { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 10px; border-radius: 12px; border: 1px solid var(--line2); font-size: 13px; font-weight: 700; width: 100%; text-align: left; }
 .rush.on { border-color: var(--down); background: var(--down-bg); color: var(--down); }
 .check { width: 22px; height: 22px; border-radius: 7px; border: 2px solid var(--line2); display: grid; place-items: center; flex: none; font-size: 13px; }

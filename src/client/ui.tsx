@@ -1,15 +1,14 @@
 // ===== 共通の小さな部品 =====
+import { Avatar } from './Avatar';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { SKILLS, SKILL_ICON, SKILL_NAME } from '../logic/config';
 import type { Game, Skill, Skills } from '../logic/types';
 
 export const companyColor = (g: Game, id: string) => `var(--c${Math.max(0, g.companies.findIndex(c => c.id === id)) % 4})`;
-const hue = (s: string) => { let h = 0; for (const ch of s) h = (h * 31 + ch.codePointAt(0)!) % 360; return h; };
 
+/** 社員の顔（名前から決まる似顔絵） */
 export function Face({ name, size = 30 }: { name: string; size?: number }) {
-  const h = hue(name);
-  const first = [...name.replace(/\s.*/, '')][0] || '?';
-  return <span className="face" style={{ width: size, height: size, fontSize: size * .44, background: `linear-gradient(135deg, hsl(${h} 70% 58%), hsl(${(h + 40) % 360} 70% 45%))` }}>{first}</span>;
+  return <span className="face" style={{ width: size, height: size }}><Avatar name={name} size={size} /></span>;
 }
 
 export function LogoMark({ g, id, name }: { g: Game; id: string; name: string }) {
