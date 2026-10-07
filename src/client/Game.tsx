@@ -236,7 +236,7 @@ function RivalsTab({ v, me }: { v: PlayerView; me: string }) {
           <div className="rival">
             <span className="rk" style={{ color: i === 0 ? 'var(--gold)' : 'var(--faint)' }}>{i + 1}</span>
             <LogoMark g={g} id={c.id} name={c.name} />
-            <div className="grow"><b>{c.name}</b>{c.id === me && <span className="chip ink" style={{ marginLeft: 6 }}>あなた</span>} <IndustryChip c={c} />
+            <div className="grow"><b>{c.name}</b>{c.id === me && <span className="chip ink" style={{ marginLeft: 6 }}>あなた</span>}{c.bot && <span className="chip" style={{ marginLeft: 6 }}>🤖 CPU</span>} <IndustryChip c={c} />
               <div className="note">{v.submitted[c.id] ? '✓ 提出済み' : '考え中…'}</div></div>
             <span className={`num ${c.cash < 0 ? 'down' : ''}`} style={{ fontSize: 20 }}>{yen(c.cash)}</span>
           </div>

@@ -1,7 +1,8 @@
 // ===== ゲーム外の画面：オープニング・ホーム・設定・ロビー・交代画面 =====
 import { useMemo, useState } from 'react';
 import { GAME } from '../logic/config';
-import type { Game } from '../logic/types';
+import type { BotLevel, Game } from '../logic/types';
+import type { LocalPlayer } from './session';
 import { ROOM_RE, NAME_MAX, type LobbyInfo } from '../shared/protocol';
 import { confetti, cannons } from './fx/confetti';
 import { buzz, reducedMotion, sfx, unlockAudio } from './fx/sound';
@@ -106,26 +107,42 @@ function ModePicker({ value, onChange }: { value: number; onChange: (q: number) 
 }
 
 // ---------- ローカル設定 ----------
-export function LocalSetup({ onBack, onStart }: { onBack: () => void; onStart: (names: string[], quarters: number) => void }) {
+export function LocalSetup({ onBack, onStart }: { onBack: () => void; onStart: (players: LocalPlayer[], quarters: number) => void }) {
   const [n, setN] = useState(3);
   const [quarters, setQuarters] = useState<number>(GAME.quarters);
   const defaults = ['ゼロイチ株式会社', 'ネオソフト', 'ピクセル堂', 'バグナシ技研'];
+  const cpuNames = ['CPU・オートメ商事', 'CPU・ロボテック', 'CPU・アルゴ社', 'CPU・シリコン堂'];
   const [names, setNames] = useState(defaults);
-  const ok = names.slice(0, n).every(x => x.trim()) && new Set(names.slice(0, n).map(x => x.trim())).size === n;
+  const [kinds, setKinds] = useState<('human' | BotLevel)[]>(['human', 'human', 'human', 'human']);
+  const list = names.slice(0, n).map((x, i) => ({ name: x.trim(), bot: kinds[i] === 'human' ? undefined : kinds[i] as BotLevel }));
+  const humans = list.filter(p => !p.bot).length;
+  const ok = list.every(p => p.name) && new Set(list.map(p => p.name)).size === n && humans >= 1;
+  const setKind = (i: number, k: 'human' | BotLevel) => {
+    sfx.tap();
+    setKinds(a => a.map((x, j) => (j === i ? k : x)));
+    // CPU にしたら名前もCPUらしく（人に戻したら元の名前）
+    setNames(a => a.map((x, j) => (j !== i ? x : k === 'human' ? (x.startsWith('CPU') ? defaults[i] : x) : (x.startsWith('CPU') ? x : cpuNames[i]))));
+  };
   return (
     <div className="page">
       <div className="topbar"><button className="icon-btn" onClick={onBack} aria-label="戻る">←</button><h1>この端末で遊ぶ</h1><span style={{ width: 40 }} /></div>
-      <div className="field"><label>人数</label>
-        <div className="stepper">{[2, 3, 4].map(k => <button key={k} className={k === n ? 'on' : ''} onClick={() => { setN(k); sfx.tap(); }}>{k}人</button>)}</div>
+      <div className="field"><label>社数（CPUを含む）</label>
+        <div className="stepper">{[2, 3, 4].map(k => <button key={k} className={k === n ? 'on' : ''} onClick={() => { setN(k); sfx.tap(); }}>{k}社</button>)}</div>
       </div>
       <ModePicker value={quarters} onChange={setQuarters} />
       {names.slice(0, n).map((v, i) => (
-        <div className="field" key={i}><label>{i + 1}社目の会社名</label>
+        <div className="field" key={i}>
+          <label>{i + 1}社目</label>
+          <div className="seg" style={{ marginBottom: 6 }}>
+            <button className={kinds[i] === 'human' ? 'on' : ''} onClick={() => setKind(i, 'human')}>👤 人</button>
+            <button className={kinds[i] === 'normal' ? 'on' : ''} onClick={() => setKind(i, 'normal')}>🤖 CPU（ふつう）</button>
+            <button className={kinds[i] === 'easy' ? 'on' : ''} onClick={() => setKind(i, 'easy')}>🤖 CPU（よわい）</button>
+          </div>
           <input className="input" value={v} maxLength={NAME_MAX} onChange={e => setNames(a => a.map((x, j) => (j === i ? e.target.value : x)))} />
         </div>
       ))}
-      <p className="note">順番に端末を渡して、ほかの人に見えないように決めていきます。</p>
-      <div className="fixed-bottom"><button className="btn primary big" disabled={!ok} onClick={() => onStart(names.slice(0, n).map(x => x.trim()), quarters)}>{ok ? `${n}社・${MODE_LABEL[quarters]}でスタート！` : '会社名を入力してください（重複なし）'}</button></div>
+      <p className="note">{humans <= 1 ? 'ひとりで遊ぶモード：CPUは自動で決めるので、すぐに次へ進みます。' : '順番に端末を渡して、ほかの人に見えないように決めていきます。CPUは自動で決めます。'}</p>
+      <div className="fixed-bottom"><button className="btn primary big" disabled={!ok} onClick={() => onStart(list, quarters)}>{ok ? `${n}社（CPU${n - humans}）・${MODE_LABEL[quarters]}でスタート！` : humans < 1 ? '人のプレイヤーが1社以上必要です' : '会社名を入力してください（重複なし）'}</button></div>
     </div>
   );
 }
@@ -155,7 +172,7 @@ export function OnlineJoin({ onBack, onJoin }: { onBack: () => void; onJoin: (ro
 }
 
 // ---------- ロビー ----------
-export function Lobby({ room, lobby, me, onStart, onLeave, connected }: { room: string; lobby: LobbyInfo | null; me: string; onStart: (quarters: number) => void; onLeave: () => void; connected: boolean }) {
+export function Lobby({ room, lobby, me, onStart, onLeave, connected, onAddBot, onRemoveBot }: { room: string; lobby: LobbyInfo | null; me: string; onStart: (quarters: number) => void; onLeave: () => void; connected: boolean; onAddBot: (level: BotLevel) => void; onRemoveBot: (id: string) => void }) {
   const host = lobby?.hostId === me;
   const [quarters, setQuarters] = useState<number>(GAME.quarters);
   const n = lobby?.players.length || 0;
@@ -178,12 +195,18 @@ export function Lobby({ room, lobby, me, onStart, onLeave, connected }: { room: 
       {lobby?.players.map((p, i) => (
         <div className="player-row" key={p.id}>
           <span className="logo-mark" style={{ background: `var(--c${i % 4})` }}>{[...p.name][0]}</span>
-          <div className="grow"><b>{p.name}</b>{p.id === me && <span className="chip ink" style={{ marginLeft: 6 }}>あなた</span>}</div>
+          <div className="grow"><b>{p.name}</b>{p.id === me && <span className="chip ink" style={{ marginLeft: 6 }}>あなた</span>}{p.bot && <span className="chip" style={{ marginLeft: 6 }}>🤖 CPU（{p.bot === 'easy' ? 'よわい' : 'ふつう'}）</span>}</div>
           {p.id === lobby.hostId && <span className="chip gold">👑 ホスト</span>}
-          <span className={`online-dot ${p.online ? '' : 'off'}`} />
+          {p.bot ? (host && <button className="btn xs" onClick={() => onRemoveBot(p.id)}>外す</button>) : <span className={`online-dot ${p.online ? '' : 'off'}`} />}
         </div>
       ))}
       {n < GAME.minPlayers && <p className="note" style={{ marginTop: 12 }}>招待リンクを送って、あと{GAME.minPlayers - n}社以上集めましょう。</p>}
+      {host && n < GAME.maxPlayers && (
+        <div className="row" style={{ gap: 6, marginTop: 10 }}>
+          <button className="btn sm grow" onClick={() => onAddBot('normal')}>🤖 CPUを追加（ふつう）</button>
+          <button className="btn sm grow" onClick={() => onAddBot('easy')}>🤖 CPUを追加（よわい）</button>
+        </div>
+      )}
       {host ? <div style={{ marginTop: 14 }}><ModePicker value={quarters} onChange={setQuarters} /></div> : <p className="note" style={{ marginTop: 12 }}>期間（3年／2年）はホストが開始時に選びます。</p>}
       <div className="fixed-bottom">
         {host

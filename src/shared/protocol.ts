@@ -4,16 +4,17 @@
 //  失敗するときは Error を投げる（トランザクションは中止される）。
 import { cancelSubmit, createGame, submit as doSubmit, tryResolve } from '../logic/game';
 import { GAME } from '../logic/config';
-import type { BidSubmit, DevSubmit, Game, PickSubmit } from '../logic/types';
+import type { BidSubmit, BotLevel, DevSubmit, Game, PickSubmit } from '../logic/types';
+import { runBots } from '../logic/bots';
 
 export const ROOM_RE = /^[A-Za-z0-9]{2,24}$/;
 export const NAME_MAX = 12;
 
-export interface LobbyInfo { players: { id: string; name: string; online: boolean }[]; hostId: string; started: boolean }
+export interface LobbyInfo { players: { id: string; name: string; online: boolean; bot?: BotLevel }[]; hostId: string; started: boolean }
 export interface ChatMsg { from: string; name: string; text: string; at: number }
 
 export interface RoomData {
-  players: { id: string; name: string }[];
+  players: { id: string; name: string; bot?: BotLevel }[];
   hostId: string;
   game: Game | null;
   chat: ChatMsg[];
@@ -29,11 +30,11 @@ const emptyRoom = (): RoomData => ({ players: [], hostId: '', game: null, chat: 
 /** ホスト：最初に入った会社。いなくなっていたら、オンラインの会社の先頭が代わりを務める */
 export function effectiveHost(d: RoomData, online: Set<string>): string {
   if (online.has(d.hostId)) return d.hostId;
-  return d.players.find(p => online.has(p.id))?.id || d.hostId;
+  return d.players.find(p => !p.bot && online.has(p.id))?.id || d.hostId;
 }
 
 export function lobbyInfo(d: RoomData, online: Set<string>): LobbyInfo {
-  return { players: d.players.map(p => ({ id: p.id, name: p.name, online: online.has(p.id) })), hostId: effectiveHost(d, online), started: !!d.game };
+  return { players: d.players.map(p => ({ id: p.id, name: p.name, online: !!p.bot || online.has(p.id), ...(p.bot ? { bot: p.bot } : {}) })), hostId: effectiveHost(d, online), started: !!d.game };
 }
 
 /** 入室。savedCid はこの端末で前に入ったときの会社ID。戻り値の cid が自分になる */
@@ -69,7 +70,9 @@ export function startGame(cur: RoomData | null, cid: string, seed: number, quart
   if (d.game && d.game.phase !== 'end') throw new Error('すでに始まっています');
   if (d.players.length < GAME.minPlayers) throw new Error(`${GAME.minPlayers}社以上で開始できます`);
   d.hostId = cid;
-  d.game = createGame(d.players.map(p => ({ id: p.id, name: p.name })), seed, `online-${seed >>> 0}`, quarters);
+  if (!d.players.some(p => !p.bot)) throw new Error('人のプレイヤーが必要です');
+  d.game = createGame(d.players.map(p => ({ id: p.id, name: p.name, bot: p.bot })), seed, `online-${seed >>> 0}`, quarters);
+  runBots(d.game);
   return d;
 }
 
@@ -80,6 +83,7 @@ export function submitMove(cur: RoomData | null, cid: string, data: BidSubmit | 
   if (pk !== phaseKey(g.q, g.phase)) throw new Error('フェーズが進んでいます。画面を確認してください');
   doSubmit(g, cid, data);
   tryResolve(g);
+  runBots(g);
   return d;
 }
 
@@ -103,5 +107,25 @@ export function backToLobby(cur: RoomData | null, cid: string): RoomData {
   const d = need(cur, cid);
   d.hostId = cid;
   d.game = null;
+  return d;
+}
+
+const BOT_NAMES = ['CPU・オートメ商事', 'CPU・ロボテック', 'CPU・アルゴ社', 'CPU・シリコン堂', 'CPU・ニューロン', 'CPU・ビット工房'];
+
+/** CPU を追加（ゲーム開始前・満員まで） */
+export function addBot(cur: RoomData | null, cid: string, level: BotLevel): RoomData {
+  const d = need(cur, cid);
+  if (d.game && d.game.phase !== 'end') throw new Error('ゲーム中はCPUを追加できません');
+  if (d.players.length >= GAME.maxPlayers) throw new Error(`満員です（最大${GAME.maxPlayers}社）`);
+  const name = BOT_NAMES.find(n => !d.players.some(p => p.name === n)) || `CPU${d.nextNo}`;
+  d.players.push({ id: `c${d.nextNo++}`, name, bot: level });
+  return d;
+}
+
+/** CPU を外す（ゲーム開始前） */
+export function removeBot(cur: RoomData | null, cid: string, botId: string): RoomData {
+  const d = need(cur, cid);
+  if (d.game && d.game.phase !== 'end') throw new Error('ゲーム中はCPUを外せません');
+  d.players = d.players.filter(p => !(p.id === botId && p.bot));
   return d;
 }

@@ -1,9 +1,10 @@
 // ===== セッション：ローカル（ホットシート）とオンラインを同じ形で扱う =====
 import { useSyncExternalStore } from 'react';
 import { cancelSubmit, createGame, submit as doSubmit, subsOf, tryResolve } from '../logic/game';
+import { runBots } from '../logic/bots';
 import { viewFor, type PlayerView } from '../logic/view';
-import type { BidSubmit, DevSubmit, Game, PickSubmit } from '../logic/types';
-import { addChat, backToLobby, cancelMove, joinRoom, lobbyInfo, phaseKey, startGame, submitMove, type ChatMsg, type LobbyInfo, type RoomData } from '../shared/protocol';
+import type { BidSubmit, BotLevel, DevSubmit, Game, PickSubmit } from '../logic/types';
+import { addBot, addChat, backToLobby, removeBot, cancelMove, joinRoom, lobbyInfo, phaseKey, startGame, submitMove, type ChatMsg, type LobbyInfo, type RoomData } from '../shared/protocol';
 import { announce, transact, watchPresence, watchRoom } from './store';
 
 export interface Snapshot {
@@ -26,6 +27,8 @@ export interface Session {
   start(quarters?: number): void;
   again(): void;
   chat(text: string): void;
+  addBot(level: BotLevel): void;
+  removeBot(id: string): void;
   openTurn(): void;
   leave(): void;
 }
@@ -44,6 +47,8 @@ abstract class Base implements Session {
   abstract start(quarters?: number): void;
   abstract again(): void;
   chat(_text: string) { /* ローカルではなし */ }
+  addBot(_level: BotLevel) { /* オンラインのロビーだけ */ }
+  removeBot(_id: string) { /* オンラインのロビーだけ */ }
   openTurn() { /* オンラインではなし */ }
   abstract leave(): void;
 }
@@ -58,14 +63,17 @@ export function savedLocal(): Game | null {
 export function clearLocal() { try { localStorage.removeItem(LOCAL_KEY); } catch { /* 無視 */ } }
 
 // ゲームごとに別のIDにする（演出の既読管理がゲームをまたいで混ざらないように）
-function newLocalGame(names: string[], quarters?: number): Game {
+export type LocalPlayer = { name: string; bot?: BotLevel };
+function newLocalGame(players: LocalPlayer[], quarters?: number): Game {
   const seed = (Math.random() * 2 ** 31) | 0;
-  return createGame(names.map((n, i) => ({ id: `c${i}`, name: n })), seed, `local-${seed}-${Date.now().toString(36)}`, quarters);
+  const g = createGame(players.map((p, i) => ({ id: `c${i}`, name: p.name, bot: p.bot })), seed, `local-${seed}-${Date.now().toString(36)}`, quarters);
+  runBots(g);
+  return g;
 }
 
 export class LocalSession extends Base {
   private g: Game;
-  constructor(names: string[] | null, resume?: Game, quarters?: number) {
+  constructor(names: LocalPlayer[] | null, resume?: Game, quarters?: number) {
     super({ mode: 'local', stage: 'pass' });
     this.g = resume ?? newLocalGame(names!, quarters);
     this.refresh('pass');
@@ -74,24 +82,27 @@ export class LocalSession extends Base {
     const g = this.g;
     if (g.phase === 'end') return g.companies[0].id;
     const done = subsOf(g);
-    return (g.companies.find(c => !done[c.id]) || g.companies[0]).id;
+    const humans = g.companies.filter(c => !c.bot);
+    return (humans.find(c => !done[c.id]) || humans[0] || g.companies[0]).id;
   }
   private refresh(stage: Snapshot['stage']) {
     const me = this.current();
     try { localStorage.setItem(LOCAL_KEY, JSON.stringify(this.g)); } catch { /* 容量不足 */ }
-    this.set({ me, stage: this.g.phase === 'end' ? 'play' : stage, view: viewFor(this.g, me), lobby: null });
+    // 人が1人だけ（ほかはCPU）なら、端末を渡す画面は出さない
+    const solo = this.g.companies.filter(c => !c.bot).length <= 1;
+    this.set({ me, stage: this.g.phase === 'end' || solo ? 'play' : stage, view: viewFor(this.g, me), lobby: null });
   }
   submit(data: BidSubmit | DevSubmit | PickSubmit) {
     doSubmit(this.g, this.snap.me, data);
     tryResolve(this.g);
+    runBots(this.g);
     this.refresh('pass');
   }
   cancel() { cancelSubmit(this.g, this.snap.me); this.refresh('play'); }
   openTurn() { this.set({ stage: 'play' }); }
   start() { /* 作成時に開始済み */ }
   again() {
-    const names = this.g.companies.map(c => c.name);
-    this.g = newLocalGame(names, this.g.quarters);
+    this.g = newLocalGame(this.g.companies.map(c => ({ name: c.name, bot: c.bot })), this.g.quarters);
     this.refresh('pass');
   }
   leave() { if (this.g.phase === 'end') clearLocal(); }
@@ -160,6 +171,8 @@ export class OnlineSession extends Base {
   }
   again() { this.act(backToLobby); }
   chat(text: string) { const at = Date.now(); this.act((d, me) => addChat(d, me, text, at)); }
+  addBot(level: BotLevel) { this.act((d, me) => addBot(d, me, level)); }
+  removeBot(id: string) { this.act((d, me) => removeBot(d, me, id)); }
   leave() { this.offs.forEach(o => o()); this.offs = []; }
 }
 

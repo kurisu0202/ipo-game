@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { addChat, backToLobby, cancelMove, effectiveHost, joinRoom, phaseKey, startGame, submitMove, type RoomData } from '../src/shared/protocol';
-import { pickIndustry, smartBid, smartDev } from '../src/logic/bots';
+import { addBot, addChat, backToLobby, cancelMove, effectiveHost, joinRoom, lobbyInfo, phaseKey, removeBot, startGame, submitMove, type RoomData } from '../src/shared/protocol';
+import { createGame, submit, tryResolve } from '../src/logic/game';
+import { pickIndustry, runBots, smartBid, smartDev } from '../src/logic/bots';
 
 // 毎回 JSON を通す（Firebase に文字列で保存するのと同じ）
 const save = (d: RoomData) => JSON.parse(JSON.stringify(d)) as RoomData;
@@ -55,5 +56,37 @@ describe('オンラインの部屋', () => {
     expect(d.game).toBeNull();
     expect(d.hostId).toBe('c2');
     console.log('最大データサイズ', max, '文字');
+  });
+});
+
+describe('CPU', () => {
+  it('人1社＋CPU3社：CPUは自動で提出し、人が出すたびにゲームが進んで最後まで終わる', () => {
+    const g = createGame([{ id: 'h', name: '人' }, { id: 'b1', name: 'CPU1', bot: 'normal' }, { id: 'b2', name: 'CPU2', bot: 'easy' }, { id: 'b3', name: 'CPU3', bot: 'normal' }], 99);
+    runBots(g);
+    expect(g.phase).toBe('pick');
+    expect(Object.keys(g.pickSubs!).sort()).toEqual(['b1', 'b2', 'b3']);
+    let steps = 0;
+    while (g.phase !== 'end' && steps++ < 100) {
+      const data = g.phase === 'pick' ? pickIndustry(g, 'h', Math.random) : g.phase === 'bid' ? smartBid(g, 'h', Math.random) : smartDev(g, 'h', Math.random);
+      submit(g, 'h', data);
+      tryResolve(g);
+      runBots(g);
+    }
+    expect(g.phase).toBe('end');
+    expect(g.final).toHaveLength(4);
+  });
+  it('オンライン：ホストがCPUを追加・削除でき、人1人＋CPUで開始できる', () => {
+    let d = save(joinRoom(null, 'A', '', new Set()).data);
+    d = save(addBot(d, 'c0', 'normal'));
+    d = save(addBot(d, 'c0', 'easy'));
+    expect(d.players.map(p => p.bot || 'human')).toEqual(['human', 'normal', 'easy']);
+    d = save(removeBot(d, 'c0', 'c2'));
+    expect(d.players).toHaveLength(2);
+    expect(lobbyInfo(d, new Set()).players[1].online).toBe(true);
+    d = save(startGame(d, 'c0', 7));
+    expect(d.game!.pickSubs!.c1).toBeTruthy();   // CPUは開始と同時に業種を選んでいる
+    d = save(submitMove(d, 'c0', { industry: 'web' }, phaseKey(d.game!.q, d.game!.phase)));
+    expect(d.game!.phase).toBe('bid');
+    expect(d.game!.bidSubs.c1).toBeTruthy();   // 次のフェーズもCPUはすでに提出済み
   });
 });

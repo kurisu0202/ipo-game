@@ -21,7 +21,7 @@ import {
 import { chance, int, next, pick, shuffle, weighted } from './rng';
 import { applyPlan, checkPlan, newOffice, nextTo, upgradeOffice } from './office';
 import type {
-  ActiveProject, BidPct, BidSubmit, Fund, FundKind, IndustryKey, OfficePlan, PickSubmit, TraitKey, CardKey, Company, DevSubmit, Engineer, FinalRow, Game, HappeningKey, HireFee,
+  ActiveProject, BidPct, BidSubmit, BotLevel, Fund, FundKind, IndustryKey, OfficePlan, PickSubmit, TraitKey, CardKey, Company, DevSubmit, Engineer, FinalRow, Game, HappeningKey, HireFee,
   Project, ProjectType, RevealBlock, RevealLine, Skill, Skills, SpyOrder, Tag,
 } from './types';
 
@@ -148,7 +148,7 @@ function drawCard(g: Game, c: Company) {
 // ---------------------------------------------------------------------
 //  ゲーム作成・期の開始
 // ---------------------------------------------------------------------
-export function createGame(players: { id: string; name: string }[], seed: number, id = 'local', quarters: number = GAME.quarters, industries = true): Game {
+export function createGame(players: { id: string; name: string; bot?: BotLevel }[], seed: number, id = 'local', quarters: number = GAME.quarters, industries = true): Game {
   if (!(GAME.modes as readonly number[]).includes(quarters)) quarters = GAME.quarters;
   if (players.length < GAME.minPlayers || players.length > GAME.maxPlayers) throw new Error(`参加は${GAME.minPlayers}〜${GAME.maxPlayers}社です`);
   const g: Game = {
@@ -162,7 +162,7 @@ export function createGame(players: { id: string; name: string }[], seed: number
   g.happenings = shuffle(g, Object.keys(HAPPENINGS) as HappeningKey[]).slice(0, quarters);
   for (const pl of players) {
     const c: Company = {
-      id: pl.id, name: pl.name, cash: GAME.startCash, rep: 0, debt: 0, engineers: [], projects: [], service: null,
+      id: pl.id, name: pl.name, ...(pl.bot ? { bot: pl.bot } : {}), cash: GAME.startCash, rep: 0, debt: 0, engineers: [], projects: [], service: null,
       hand: [], stocks: [], aiKnowhow: 0, effects: {}, trolls: [], hitsThisQuarter: 0, yearProfit: 0, completed: 0,
       sleeper: null, spyOrdersLeft: GAME.spyOrders, honestLoans: 0, honestAwarded: false, secretNotes: [],
       quarterStartCash: GAME.startCash, history: [GAME.startCash],

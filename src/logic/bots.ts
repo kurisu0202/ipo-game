@@ -1,7 +1,8 @@
 // ===== テスト用ボット（ランダム／賢い） =====
 import { BID_PCTS, CARDS, HIRE_FEES, PROJECT_TYPES, SKILLS } from './config';
 import { companyOf, freeSeats, projectCheck, skillSum, sumSkills, checkReqs } from './calc';
-import { defaultDev, emptyBid, pendingSpies } from './game';
+import { defaultDev, emptyBid, pendingSpies, submit, subsOf, tryResolve } from './game';
+import { next } from './rng';
 import { autoDeskPlan } from './office';
 import type { BidPct, BidSubmit, Company, DevSubmit, Game, HireFee, PickSubmit, Skill, SpyOrder } from './types';
 
@@ -129,3 +130,23 @@ export function smartDev(g: Game, cid: string, _r: R): DevSubmit {
 }
 
 export const isTypeKnown = (t: string) => t in PROJECT_TYPES;
+
+/**
+ * CPU の会社に、今のフェーズの提出をさせる。全員そろえば解決して、次のフェーズでも同じことをくり返す。
+ * 乱数はゲームの乱数を使うので、オンラインでも全員の画面で同じ結果になる。
+ */
+export function runBots(g: Game) {
+  for (let guard = 0; guard < 100 && g.phase !== 'end'; guard++) {
+    const r = () => next(g);
+    const subs = subsOf(g);
+    for (const c of g.companies) {
+      if (!c.bot || subs[c.id]) continue;
+      const easy = c.bot === 'easy';
+      const data = g.phase === 'pick' ? pickIndustry(g, c.id, r)
+        : g.phase === 'bid' ? (easy ? randomBid : smartBid)(g, c.id, r)
+          : (easy ? randomDev : smartDev)(g, c.id, r);
+      submit(g, c.id, data);
+    }
+    if (!tryResolve(g)) break;
+  }
+}
