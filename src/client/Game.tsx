@@ -144,6 +144,7 @@ function bidSummary(g: G, d: BidSubmit) {
   }
   if (d.rent) parts.push({ t: 'レンタル申込' });
   if (d.ad !== undefined && ADS[d.ad]) parts.push({ t: `${ADS[d.ad].name} ${ADS[d.ad].cost}` });
+  if (d.special) parts.push({ t: '必殺技発動' });
   return parts;
 }
 
@@ -181,7 +182,7 @@ function MeTab({ v, me }: { v: PlayerView; me: Company }) {
   return (
     <div className="content">
       <div className="row" style={{ margin: '12px 2px' }}><LogoMark g={g} id={me.id} name={me.name} /><div className="grow"><b style={{ fontSize: 18 }}>{me.name}</b> <IndustryChip c={me} full /><div className="note">完了した案件 {me.completed}件</div></div></div>
-      {me.industry && <details className="fold" style={{ marginBottom: 10 }}><summary>業種の得意・弱点</summary><div className="fold-body"><IndustryDetail k={me.industry} /></div></details>}
+      {me.industry && <details className="fold" style={{ marginBottom: 10 }}><summary>業種の得意・弱点・必殺技{me.skillUsed ? '（必殺技は使用済み）' : ''}</summary><div className="fold-body"><IndustryDetail k={me.industry} /></div></details>}
       <div className="kpis">
         <div className="kpi"><small>💴 現金</small><span className={`num ${me.cash < 0 ? 'down' : ''}`}>{me.cash.toLocaleString()}<small>万円</small></span></div>
         <div className="kpi"><small>⭐ 評判</small><span className="num">{me.rep}</span><div className="note">入札の比較で{Math.abs(me.rep * 3)}%{me.rep >= 0 ? '有利' : '不利'}</div></div>

@@ -599,3 +599,6 @@ details.fold.secret > summary { color: var(--down); }
 .skill.reduced { background: var(--down-bg); color: var(--down); border-color: transparent; }
 .skill.reduced s { opacity: .6; margin-right: 1px; }
 .icell.lp, .pal.lp { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.ind-list .special { color: var(--gold); }
+.special-card .seg button small { font-size: 10px; opacity: .8; font-weight: 600; }
+.special-card .seg button { white-space: normal; line-height: 1.25; }

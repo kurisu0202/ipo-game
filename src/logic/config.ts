@@ -292,3 +292,14 @@ export const ADS = [
   { name: 'テレビCM', icon: '📺', cost: 900, rep: 2 },
 ] as const;
 export const AD = { maxRep: 2 };
+
+// ---------- 業種の必殺技（1ゲームに1回だけ） ----------
+export interface SpecialSpec { name: string; icon: string; phase: 'bid' | 'dev'; target?: 'project' | 'rival'; desc: string }
+export const SPECIALS: Record<IndustryKey, SpecialSpec> = {
+  sier: { name: '根回し', icon: '🤝', phase: 'bid', target: 'project', desc: '選んだ案件を、入札なしで予算の100%で受注する（ほかの会社の入札は無効。同じ技がぶつかったら評判→抽選）' },
+  consul: { name: '引き抜き工作', icon: '🕶️', phase: 'bid', target: 'rival', desc: '選んだライバルの一番優秀な社員を、防御カードを無視して引き抜く（席が必要）' },
+  web: { name: 'スピード納品', icon: '⚡', phase: 'dev', desc: '今期、必要スキルを満たした案件がすべてさらに+1進む（負債は増えない）' },
+  saas: { name: 'バズマーケ', icon: '📈', phase: 'dev', desc: '自社サービスがすぐにLv+1、今期のサービス収入×2（サービスが必要）' },
+  ai: { name: 'AI自動化', icon: '🤖', phase: 'dev', desc: '今期、全社員の持っているスキルがすべて+1' },
+  maint: { name: '障害ゼロ宣言', icon: '🛡️', phase: 'dev', desc: '負債をすべて0にして、評判+1' },
+};

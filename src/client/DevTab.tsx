@@ -1,6 +1,6 @@
 // ===== 開発タブ =====
 import { useState } from 'react';
-import { ABANDON, FUNDS, GROWTH, INVEST, INVESTIGATE_COST, TRAINING, TRAITS, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS, xpNeed } from '../logic/config';
+import { ABANDON, FUNDS, GROWTH, INVEST, INVESTIGATE_COST, SPECIALS, TRAINING, TRAITS, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS, xpNeed } from '../logic/config';
 import { assignees, effSkills, hasSlot, launchCost, projectCheck, quarterLabel, rushDebt, season, serviceIncome, servicePower, skillSum, slots, sumSkills, toggleSlot, totalQ, working } from '../logic/calc';
 import { abandonFee, canTrain, pendingSpies } from '../logic/game';
 import type { ActiveProject, Company, DevSubmit, Engineer, Game, Skill, SpyOrder } from '../logic/types';
@@ -51,6 +51,23 @@ export function DevTab({ v, me, draft, set, locked }: P) {
       <SecretFile v={v} me={me} orders={draft.spyOrders} locked={locked} open={pend.length > 0}
         setOrder={(eid, o) => set(d => ({ ...d, spyOrders: { ...d.spyOrders, [eid]: o } }))} />
       {me.effects.slack === g.q && <div className="warn" style={{ marginTop: 10 }}>💬 深夜のSlack爆撃で、今期は全社員のスキル−1（レベル1のスキルは0になります。来期には元に戻ります）</div>}
+
+      {me.industry && SPECIALS[me.industry].phase === 'dev' && (() => {
+        const sp = SPECIALS[me.industry!];
+        const needSvc = me.industry === 'saas' && !me.service;
+        return (
+          <>
+            <div className="sec-title">{sp.icon} 必殺技「{sp.name}」 <small>1ゲームに1回だけ</small></div>
+            <div className={`card special-card ${draft.special ? 'hl' : ''}`}>
+              <div className="note" style={{ marginBottom: 8 }}>{sp.desc}</div>
+              {me.skillUsed ? <div className="note">✔ この必殺技はもう使いました</div>
+                : <button className={`btn ${draft.special ? 'gold' : ''} big`} disabled={locked || needSvc} onClick={() => { sfx.tap(); set(d => ({ ...d, special: !d.special })); }}>
+                  {needSvc ? '自社サービスを立ち上げると使えます' : draft.special ? `⚡ 今期「${sp.name}」を使う（取消）` : `今期「${sp.name}」を使う`}</button>}
+              {draft.special && me.industry === 'ai' && <div className="note" style={{ marginTop: 6 }}>スキル+1は決算のときに反映されます（この画面の数字にはまだ入っていません）</div>}
+            </div>
+          </>
+        );
+      })()}
 
       <div className="sec-title">🛠️ 進行中の案件 <span className="n">{me.projects.length}</span></div>
       {me.projects.length === 0 && <div className="empty">進行中の案件はありません。待機中の社員は負債を返す（リファクタリング）か、サービスに回しましょう</div>}
@@ -559,6 +576,7 @@ export function devSummary(g: Game, me: Company, d: DevSubmit) {
   if (d.rush.length) parts.push({ t: `突貫 ${d.rush.length}件`, w: true });
   if (fired) parts.push({ t: `解雇 ${fired}人`, w: true });
   if (trained) parts.push({ t: `研修 ${trained}人` });
+  if (d.special && me.industry) parts.push({ t: `必殺技「${SPECIALS[me.industry].name}」` });
   const work = planCost(me, d.office);
   if (work) parts.push({ t: `工事 ${work.toLocaleString()}` });
   const inv = Object.values(d.invest || {}).reduce((t, v) => t + v, 0);

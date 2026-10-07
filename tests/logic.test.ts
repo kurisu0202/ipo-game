@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createGame, defaultDev, emptyBid, grantTrait, resolveBid, resolveDev, submit, tryResolve } from '../src/logic/game';
 import { viewFor } from '../src/logic/view';
-import { TRAINING } from '../src/logic/config';
+import { SPECIALS, TRAINING } from '../src/logic/config';
 import { checkPlan, expandCost, nextTo, shape, upgradeOffice } from '../src/logic/office';
 import { projectCheck } from '../src/logic/calc';
 import type { ActiveProject, BidSubmit, Company, Engineer, Game, Project } from '../src/logic/types';
@@ -255,21 +255,18 @@ describe('経験値', () => {
 
 describe('業種', () => {
   const four = () => createGame(['a', 'b', 'c', 'd'].map(id => ({ id, name: id })), 4242);
-  it('ゲーム開始時は業種選び。各社に違う2つが配られ、他社の候補は見えない', () => {
+  it('ゲーム開始時は業種選び。6つから自由に選べ、他社の候補は見えない', () => {
     const g = four();
     expect(g.phase).toBe('pick');
-    g.companies.forEach(c => { expect(c.choices).toHaveLength(2); expect(new Set(c.choices).size).toBe(2); });
-    // 3社目までは重ならない（6種類を順に配る）
-    expect(new Set(g.companies.slice(0, 3).flatMap(c => c.choices!)).size).toBe(6);
+    g.companies.forEach(c => { expect(c.choices).toHaveLength(6); });
     const v = viewFor(g, 'a');
-    expect(v.game.companies.find(c => c.id === 'a')!.choices).toHaveLength(2);
+    expect(v.game.companies.find(c => c.id === 'a')!.choices).toHaveLength(6);
     expect(v.game.companies.find(c => c.id === 'b')!.choices).toBeUndefined();
   });
   it('配られていない業種は選べない。全員そろうと決定して1期目の入札へ', () => {
     const g = four();
     const a = co(g, 'a');
-    const other = (['sier', 'web', 'saas', 'ai', 'maint', 'consul'] as const).find(k => !a.choices!.includes(k))!;
-    expect(() => submit(g, 'a', { industry: other })).toThrow('配られた業種');
+    expect(() => submit(g, 'a', { industry: 'nope' as never })).toThrow('配られた業種');
     g.companies.forEach(c => submit(g, c.id, { industry: c.choices![0] }));
     expect(tryResolve(g)).toBe(true);
     expect(g.phase).toBe('bid');
@@ -610,5 +607,53 @@ describe('広告・同点', () => {
     g.market = [proj('p1', 1000)];
     bidOnly(g, { a: { bids: { p1: 90 } }, b: { bids: { p1: 90 } } });
     expect(g.reveal!.blocks.some(b => b.lines.some(l => l.text.includes('同額・同評判のため抽選')))).toBe(true);
+  });
+});
+
+describe('業種の必殺技', () => {
+  it('根回し：入札なしで予算100%で受注。1ゲーム1回', () => {
+    const g = two(); cleanHands(g);
+    co(g, 'a').industry = 'sier';
+    g.market = [proj('p1', 1000)];
+    bidOnly(g, { a: { special: { project: 'p1' } }, b: { bids: { p1: 50 } } });
+    expect(co(g, 'a').projects[0]?.price).toBe(1000);
+    expect(co(g, 'b').projects).toHaveLength(0);
+    expect(co(g, 'a').skillUsed).toBe(true);
+    const s = { ...emptyBid(), special: { project: 'x' } };
+    g.phase = 'bid'; g.market = [proj('x', 500)];
+    submit(g, 'a', s);
+    expect(g.bidSubs.a.special).toBeUndefined();   // 使用済み
+  });
+  it('引き抜き工作：防御カードを無視して一番優秀な社員を引き抜く', () => {
+    const g = two(); cleanHands(g);
+    co(g, 'a').industry = 'consul';
+    co(g, 'b').hand = ['D1', 'D3'];
+    co(g, 'b').engineers = [eng('ace', { BE: 5 }), eng('x', { FE: 1 })];
+    g.market = [];
+    bidOnly(g, { a: { special: { target: 'b' } } });
+    expect(co(g, 'a').engineers.some(e => e.id === 'ace')).toBe(true);
+    expect(co(g, 'b').hand).toEqual(['D1', 'D3']);   // 防御カードは使われない
+  });
+  it('スピード納品・AI自動化・障害ゼロ宣言・バズマーケ', () => {
+    const mk = (ind: 'web' | 'ai' | 'maint' | 'saas') => {
+      const g = two(); cleanHands(g); g.q = 0; g.phase = 'dev';
+      const a = co(g, 'a'); a.industry = ind; a.debt = 4; a.rep = 0; a.cash = 0;
+      a.engineers = [eng('e', { BE: 1 }, { assign: 'p1' })];
+      a.projects = [active('p1', 100, { BE: 2 }, { work: 5 })];
+      if (ind === 'saas') a.service = { level: 1 };
+      devOnly(g, (c, s) => { if (c.id === 'a') s.special = true; });
+      return a;
+    };
+    expect(mk('web').projects[0].progress).toBe(0);   // スキル不足なら進まない
+    expect(mk('ai').projects[0].progress).toBe(1);    // BE1+1=2 で足りる
+    const m = mk('maint'); expect([m.debt, m.rep]).toEqual([0, 1]);
+    const sa = mk('saas'); expect(sa.service!.level).toBe(2);
+    const g = two(); cleanHands(g); g.q = 0; g.phase = 'dev';
+    const a = co(g, 'a'); a.industry = 'web';
+    a.engineers = [eng('e', { BE: 2 }, { assign: 'p1' })];
+    a.projects = [active('p1', 100, { BE: 2 }, { work: 5 })];
+    devOnly(g, (c, s) => { if (c.id === 'a') s.special = true; });
+    expect(a.projects[0].progress).toBe(2);   // 満たした案件はさらに+1
+    expect(Object.keys(SPECIALS)).toHaveLength(6);
   });
 });

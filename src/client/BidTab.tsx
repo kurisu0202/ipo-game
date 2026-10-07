@@ -1,6 +1,6 @@
 // ===== 入札タブ =====
 import { useState } from 'react';
-import { ABANDON, AD, ADS, BID_PCTS, CARDS, INDUSTRIES, DESIGN_BONUS, INTERIM, DUMP_RATE, ENGINEER, FIRE_DEBT, HIRE_FEES, LATE_PENALTY, PROJECT_TYPES, REPEAT_BONUS, REP_DISCOUNT, SECRET_MULTS, SKILLS, SKILL_NAME, STOCK_CHANCE, TAGS } from '../logic/config';
+import { ABANDON, AD, ADS, BID_PCTS, CARDS, INDUSTRIES, SPECIALS, DESIGN_BONUS, INTERIM, DUMP_RATE, ENGINEER, FIRE_DEBT, HIRE_FEES, LATE_PENALTY, PROJECT_TYPES, REPEAT_BONUS, REP_DISCOUNT, SECRET_MULTS, SKILLS, SKILL_NAME, STOCK_CHANCE, TAGS } from '../logic/config';
 import { bidFactor, canBid, checkReqs, hireBonus, payFactor, quarterLabel, round10, skillSum, slots, sumSkills, totalQ, working } from '../logic/calc';
 import { bidAmount, pendingSpies } from '../logic/game';
 import type { BidPct, BidSubmit, CardKey, Company, Game, HireFee, Project, Skill, Skills } from '../logic/types';
@@ -23,6 +23,10 @@ export function BidTab({ v, me, draft, set, locked }: P) {
       <Coach phase="bid" q={g.q} />
       <SecretFile v={v} me={me} orders={draft.spyOrders} locked={locked} open={pend.length > 0}
         setOrder={(eid, o) => set(d => ({ ...d, spyOrders: { ...d.spyOrders, [eid]: o } }))} />
+
+      {me.industry && SPECIALS[me.industry].phase === 'bid' && (
+        <SpecialBid g={g} me={me} value={draft.special} locked={locked} onSet={v => { sfx.tap(); set(d => ({ ...d, special: v })); }} />
+      )}
 
       <div className="sec-title">📋 今期の案件 <span className="n">{g.market.length}</span><small>入札は予算に対する%。一番安い会社が落札・長押しで利益の目安</small></div>
       {g.market.map(p => (
@@ -124,6 +128,33 @@ export function BidTab({ v, me, draft, set, locked }: P) {
 }
 
 /** 今期動ける社員（休みを除く）で、この案件のスキルが足りるか */
+/** 業種の必殺技（入札フェーズ）：根回し（案件を選ぶ）／引き抜き工作（相手を選ぶ） */
+function SpecialBid({ g, me, value, locked, onSet }: { g: Game; me: Company; value?: { project?: string; target?: string }; locked: boolean; onSet: (v?: { project?: string; target?: string }) => void }) {
+  const sp = SPECIALS[me.industry!];
+  return (
+    <>
+      <div className="sec-title">{sp.icon} 必殺技「{sp.name}」 <small>1ゲームに1回だけ</small></div>
+      <div className={`card special-card ${value ? 'hl' : ''}`}>
+        <div className="note" style={{ marginBottom: 8 }}>{sp.desc}</div>
+        {me.skillUsed ? <div className="note">✔ この必殺技はもう使いました</div> : (
+          <div className="seg" style={{ flexWrap: 'wrap' }}>
+            <button className={!value ? 'on' : 'off'} disabled={locked} onClick={() => onSet(undefined)}>使わない</button>
+            {sp.target === 'project' && g.market.map(p => (
+              <button key={p.id} className={value?.project === p.id ? 'on gold' : ''} disabled={locked} onClick={() => onSet({ project: p.id })}>
+                {PROJECT_TYPES[p.type].icon}{p.name}<br /><small>{p.type === 'secret' ? '予算？？？' : `${p.budget.toLocaleString()}万円`}</small>
+              </button>
+            ))}
+            {sp.target === 'rival' && g.companies.filter(c => c.id !== me.id).map(c => (
+              <button key={c.id} className={value?.target === c.id ? 'on gold' : ''} disabled={locked} onClick={() => onSet({ target: c.id })}>{c.name}<br /><small>社員{c.engineers.length}人</small></button>
+            ))}
+          </div>
+        )}
+        {value && <div className="infobar" style={{ marginTop: 8 }}>⚡ 決定すると必殺技が発動します（取り消せるのは決定前まで）</div>}
+      </div>
+    </>
+  );
+}
+
 function capacityInfo(g: Game, me: Company, reqs: Skills): { ok: boolean; text: string } {
   const miss = (m: Partial<Record<Skill, number>>) => SKILLS.filter(k => m[k]).map(k => `${SKILL_NAME[k]}あと${m[k]}`).join('・');
   const avail = me.engineers.filter(e => working(g, e));

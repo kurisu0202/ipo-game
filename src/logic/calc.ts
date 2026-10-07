@@ -18,11 +18,11 @@ export const companyOf = (g: Game, id: string) => g.companies.find(c => c.id ===
 export function effSkills(g: Game, c: Company, e: Engineer, real = false): Skills {
   if (real && e.spy && e.spy.order === 'sabo' && e.spy.for !== c.id) return {};
   const out: Skills = {};
-  const slack = c.effects.slack === g.q;
+  const d = (c.effects.boost === g.q ? 1 : 0) - (c.effects.slack === g.q ? 1 : 0);   // AI自動化 +1／Slack爆撃 −1
   for (const k of SKILLS) {
     const v = e.skills[k] || 0;
     if (!v) continue;
-    out[k] = slack ? Math.max(0, v - 1) : v;
+    out[k] = Math.max(0, v + d);
   }
   return out;
 }

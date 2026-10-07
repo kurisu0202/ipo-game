@@ -3,7 +3,7 @@
 //  すべての乱数は g.seed から作るので、同じ入力なら同じ結果になる
 // =====================================================================
 import {
-  ABANDON, ACCUSE, AD, ADS, FUNDS, GROWTH, INDUSTRIES, INVEST, OFFICE_FX, TRAINING, TRAIT, TRAITS, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
+  ABANDON, ACCUSE, AD, ADS, FUNDS, SPECIALS, GROWTH, INDUSTRIES, INVEST, OFFICE_FX, TRAINING, TRAIT, TRAITS, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
   EMPLOYEE_EVENT, ENGINEER, FIRE_DEBT, FIRST_NAMES, GAME, HACKATHON, HAPPENINGS, HAPPENING_FX, HIRE_FEES, INCIDENT,
   INTERIM, INTEREST, INVESTIGATE_COST, LAST_NAMES, LATE_PENALTY, MUST_SHARE, PROJECT_TYPES, REMOTE_SALARY, RENTAL, REPEAT_BONUS,
   REP_DISCOUNT, SECRET_MULTS, SERVICE, SEVERANCE_QUARTERS, SKILLS, SKILL_NAME, SPY_STEAL,
@@ -180,19 +180,10 @@ export function createGame(players: { id: string; name: string }[], seed: number
   return g;
 }
 
-/** 業種を2つずつ配る（なるべく他社と重ならないように。足りないときは山を作り直す） */
+/** 業種選び：6つの業種から自由に1つ（同じ業種を選ぶ会社があってもよい） */
 function dealIndustries(g: Game) {
   const keys = Object.keys(INDUSTRIES) as IndustryKey[];
-  let pile: IndustryKey[] = [];
-  for (const c of g.companies) {
-    const hand: IndustryKey[] = [];
-    while (hand.length < 2) {
-      if (!pile.length) pile = shuffle(g, [...keys]);
-      const k = pile.pop()!;
-      if (!hand.includes(k)) hand.push(k);
-    }
-    c.choices = hand;
-  }
+  for (const c of g.companies) c.choices = [...keys];
   g.phase = 'pick';
   g.pickSubs = {};
 }
@@ -210,7 +201,7 @@ function resolvePick(g: Game) {
     for (let i = 0; i < (s.fewerStaff || 0) && c.engineers.length > 1; i++) c.engineers.pop();
     blocks.push({
       kind: 'info', icon: s.icon, title: c.name, owner: c.id,
-      lines: [{ text: `作戦：${s.plan}`, tone: 'muted' }, ...s.good.map(t => ({ text: `◎ ${t}`, tone: 'good' as const })), ...s.bad.map(t => ({ text: `△ ${t}`, tone: 'bad' as const }))],
+      lines: [{ text: `作戦：${s.plan}`, tone: 'muted' }, ...s.good.map(t => ({ text: `◎ ${t}`, tone: 'good' as const })), ...s.bad.map(t => ({ text: `△ ${t}`, tone: 'bad' as const })), { text: `${SPECIALS[k].icon} 必殺技「${SPECIALS[k].name}」：${SPECIALS[k].desc}`, tone: 'gold' as const }],
       stamp: { type: 'info', text: s.name, tone: 'gold' },
     });
     log(g, `${c.name}：業種は「${s.name}」`);
@@ -333,6 +324,11 @@ function cleanBid(g: Game, cid: string, s: BidSubmit): BidSubmit {
   if (s.rent && g.offers.some(o => o.id === s.rent && o.from !== cid)) out.rent = s.rent;
   out.spyOrders = cleanOrders(g, cid, s.spyOrders);
   if (s.ad !== undefined && ADS[s.ad] && ADS[s.ad].cost <= Math.max(0, c.cash) && (c.adRep || 0) < AD.maxRep) out.ad = s.ad;
+  const sp = c.industry && !c.skillUsed ? SPECIALS[c.industry] : undefined;
+  if (s.special && sp?.phase === 'bid') {
+    if (sp.target === 'project' && g.market.some(p => p.id === s.special!.project)) out.special = { project: s.special.project };
+    if (sp.target === 'rival' && s.special.target !== cid && companyOf(g, s.special.target || '')) out.special = { target: s.special.target };
+  }
   return out;
 }
 
@@ -381,6 +377,8 @@ function cleanDev(g: Game, cid: string, s: DevSubmit): DevSubmit {
     const chk = checkPlan(g, c, plan);
     if (chk.ok) { out.office = plan; officeCost = chk.cost; }
   }
+  const dsp = c.industry && !c.skillUsed ? SPECIALS[c.industry] : undefined;
+  if (s.special && dsp?.phase === 'dev' && (c.industry !== 'saas' || !!c.service)) out.special = true;
   // 投資：今年の候補に、決まった金額だけ。合計は手元の現金まで（オフィス工事の分を引いた残り）
   let left = Math.max(0, c.cash) - officeCost;
   for (const [fid, v] of Object.entries(s.invest || {})) {
@@ -596,6 +594,18 @@ export function resolveBid(g: Game) {
     }
   });
 
+  // 3.5 必殺技：引き抜き工作（防御カードを無視）
+  for (const c of g.companies) {
+    const t = subs[c.id].special?.target;
+    if (!t || c.skillUsed || c.industry !== 'consul') continue;
+    const victim = companyOf(g, t)!;
+    c.skillUsed = true;
+    const lines: RevealLine[] = [{ text: `${c.name}が必殺技「${SPECIALS.consul.name}」を ${victim.name} に発動！` }];
+    headhunt(g, c, victim, lines);
+    blocks.push({ kind: 'card', icon: SPECIALS.consul.icon, title: `必殺技：${SPECIALS.consul.name}`, sub: c.name, lines, stamp: { type: 'hit', text: '必殺技！', tone: 'gold' } });
+    headlines.push(`${c.name}、必殺技「${SPECIALS.consul.name}」で${victim.name}のエースを狙う`);
+  }
+
   // 4. レンタル成立
   for (const o of g.offers) {
     const lender = companyOf(g, o.from)!;
@@ -632,8 +642,29 @@ export function resolveBid(g: Game) {
     log(g, `${borrower.name} が ${lender.name} の ${e.name} を借りた（${o.period}期）`);
   }
 
-  // 5. 案件の落札
+  // 5. 案件の落札（根回しした案件は、入札なしでその会社が予算100%で受注）
+  const claims: Record<string, Company[]> = {};
+  for (const c of g.companies) {
+    const pid = subs[c.id].special?.project;
+    if (!pid || c.skillUsed || c.industry !== 'sier') continue;
+    c.skillUsed = true;
+    (claims[pid] ??= []).push(c);
+  }
   for (const p of g.market) {
+    if (claims[p.id]) {
+      const cs = claims[p.id];
+      const top = Math.max(...cs.map(c => c.rep));
+      const win = pick(g, cs.filter(c => c.rep === top));
+      const ap: ActiveProject = { ...p, price: p.budget, progress: 0, work: p.duration, start: q, deadline: q + p.duration - 1, rush: false, fx: 1 };
+      win.projects.push(ap);
+      win.stats.wins++;
+      if (p.type === 'fire') win.debt += FIRE_DEBT;
+      const spec = PROJECT_TYPES[p.type];
+      blocks.push({ kind: 'project', icon: spec.icon, title: p.name, lines: [{ text: `${win.name}の必殺技「${SPECIALS.sier.name}」！ 入札なしで予算${yen(p.budget)}で受注${cs.length > 1 ? `（${cs.map(c => c.name).join('・')}の根回しがぶつかり、${win.name}が勝った）` : ''}` }], stamp: { type: 'win', text: `${win.name} 根回し受注！`, tone: 'gold' } });
+      headlines.push(`${win.name}、根回しで「${p.name}」を獲得`);
+      log(g, `「${p.name}」は ${win.name} が根回しで受注`);
+      continue;
+    }
     const entries: { c: Company; amount: number; cmp: number; banned: boolean }[] = [];
     g.companies.forEach(c => {
       const pct = subs[c.id].bids[p.id];
@@ -828,6 +859,17 @@ export function resolveDev(g: Game) {
       c.stats.fired++;
       L(c, `${e.name} を解雇（退職金 −${sev}）`, 'bad');
     }
+    // 6.4 必殺技（開発フェーズ）
+    if (s.special && c.industry && !c.skillUsed && SPECIALS[c.industry].phase === 'dev') {
+      const sp = SPECIALS[c.industry];
+      c.skillUsed = true;
+      if (c.industry === 'web') c.effects.speed = q;
+      if (c.industry === 'ai') c.effects.boost = q;
+      if (c.industry === 'saas' && c.service) { c.service.level = Math.min(SERVICE.maxLv, c.service.level + 1); c.effects.buzz = q; }
+      if (c.industry === 'maint') { c.debt = 0; c.rep += 1; }
+      L(c, `${sp.icon} 必殺技「${sp.name}」発動！ ${sp.desc}`, 'gold');
+      headlines.push(`${c.name}、必殺技「${sp.name}」を発動`);
+    }
     // 6.5 案件の放棄（違約金・評判−1。受け取り済みの中間金は返さない）
     for (const id of s.drop || []) {
       const p = c.projects.find(x => x.id === id);
@@ -890,6 +932,7 @@ export function resolveDev(g: Game) {
           steps = p.rush ? 2 : 1;
           const fast = !p.rush && crew.some(e => e.trait === 'fast') && chance(g, TRAIT.fastChance);
           if (fast) steps = 2;
+          if (c.effects.speed === q) steps += 1;
           const night = crew.some(e => e.trait === 'night');
           const rd = p.rush && !night ? rushDebt(c) : 0;
           if (p.rush) { c.debt += rd; c.stats.rushes++; }
@@ -934,6 +977,7 @@ export function resolveDev(g: Game) {
       }
       let inc = serviceIncome(c, c.service.level);
       if (c.effects.review === q) inc = Math.floor(inc / 2);
+      if (c.effects.buzz === q) inc *= 2;
       if (inc) { c.cash += inc; L(c, `サービス収入 +${inc}${c.effects.review === q ? '（口コミ被害で半減）' : ''}`, 'good'); }
     }
 

@@ -54,7 +54,7 @@ export interface ActiveProject extends Project {
 
 export interface RentalOffer { id: string; from: string; engineerId: string; period: 1 | 2 | 3; share: 10 | 20 | 30; spy: SpyOrder | '' }
 
-export interface Effects { slack?: number; review?: number; noBid?: number; noHire?: number; dump?: number }
+export interface Effects { slack?: number; review?: number; noBid?: number; noHire?: number; dump?: number; boost?: number; speed?: number; buzz?: number }
 
 export interface Company {
   id: string; name: string; cash: number; rep: number; debt: number;
@@ -67,6 +67,7 @@ export interface Company {
   sleeper: { engineerId: string; order: SpyOrder } | null;
   spyOrdersLeft: number; honestLoans: number; honestAwarded: boolean;
   industry?: IndustryKey;          // 選んだ業種
+  skillUsed?: boolean;             // 業種の必殺技を使ったか（1ゲーム1回）
   invest?: Holding[];              // 今年の投資（冬の決算で結果が出る。本人だけに見える）
   office?: Office;                 // 自社オフィス（作業マスの数＝社員の上限）
   adRep?: number;                  // 広告で上乗せしている評判（冬の決算で消える）
@@ -92,6 +93,7 @@ export interface BidSubmit {
   rent?: string;
   spyOrders: Record<string, SpyOrder>;
   ad?: number;   // 広告（ADS の番号。1期1回）
+  special?: { project?: string; target?: string };   // 業種の必殺技（入札フェーズで使うもの）
 }
 
 export interface PickSubmit { industry: IndustryKey }
@@ -101,6 +103,7 @@ export interface DevSubmit {
   train?: Record<string, Skill>;   // 研修に行かせる社員 → 伸ばすスキル
   invest?: Record<string, number>; // 投資先 → 金額
   office?: OfficePlan;             // オフィスの増床・配置・席替え
+  special?: boolean;               // 業種の必殺技（開発フェーズで使うもの）
   rush: string[];
   drop?: string[];   // 放棄する案件
   launch: boolean;
