@@ -9,6 +9,7 @@ import { phaseKey, type ChatMsg } from '../shared/protocol';
 import { BidTab, CardDetail, CardTile } from './BidTab';
 import { IndustryChip, IndustryDetail } from './Industry';
 import { VoiceBubble, setVoice, voiceOn } from './Voice';
+import { OfficeView } from './Office';
 import { DevTab, EngBadges, ProjectSkillSheet, TraitLine, XpLine, devSummary } from './DevTab';
 import { sfx, setSound, soundOn } from './fx/sound';
 import type { Snapshot } from './session';
@@ -203,6 +204,8 @@ function MeTab({ v, me }: { v: PlayerView; me: Company }) {
       {g.companies.flatMap(c => c.engineers.filter(e => e.loan?.from === me.id).map(e => (
         <div className="eng" key={e.id} style={{ opacity: .75 }}><Face name={e.name} /><div className="grow"><span className="nm">{e.name}</span> <span className="badge-k rent">{c.name}に貸し出し中</span><div className="sal">給料 {e.salary}（自社負担）</div></div></div>
       )))}
+      <div className="sec-title">🏢 オフィス</div>
+      <div className="card"><OfficeView g={g} me={me} /></div>
       <div className="sec-title">🛠️ 進行中の案件 <span className="n">{me.projects.length}</span><small>長押しでスキルの過不足</small></div>
       {me.projects.length === 0 && <div className="empty">なし</div>}
       {me.projects.map(p => <MyProjectCard key={p.id} g={g} me={me} p={p} onOpen={() => setProj(p.id)} />)}
@@ -279,6 +282,7 @@ function FinalScreen({ g, me, onExit, onAgain, isHost, mode }: { g: G; me: strin
           <div className="breakdown">
             <div>現金<b>{r.cash.toLocaleString()}</b></div>
             <div>サービス<b>{r.service.toLocaleString()}</b></div>
+            <div>オフィス<b>{(r.office || 0).toLocaleString()}</b></div>
             <div>株{r.stocks.length ? `(${r.stocks.length})` : ''}<b>{r.stockTotal.toLocaleString()}</b></div>
           </div>
           {r.awards.map(a => <span key={a} className="award">{a}</span>)}

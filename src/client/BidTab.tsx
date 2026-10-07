@@ -7,6 +7,7 @@ import type { BidPct, BidSubmit, CardKey, Company, Game, HireFee, Project, Skill
 import type { PlayerView } from '../logic/view';
 import { Coach, SecretFile } from './parts';
 import { TraitLine } from './DevTab';
+import { freeSeatCount } from './Office';
 import { sfx } from './fx/sound';
 import { Face, Sheet, SkillChips, companyColor, useLongPress } from './ui';
 
@@ -38,7 +39,7 @@ export function BidTab({ v, me, draft, set, locked }: P) {
             const mine = o.from === me.id;
             const on = draft.rent === o.id;
             return (
-              <button key={o.id} className={`card ${on ? 'selected' : ''}`} style={{ width: '100%', textAlign: 'left', display: 'block' }} disabled={locked || mine}
+              <button key={o.id} className={`card ${on ? 'selected' : ''}`} style={{ width: '100%', textAlign: 'left', display: 'block' }} disabled={locked || mine || (!on && freeSeatCount(g, me) <= 0)}
                 onClick={() => { sfx.tap(); set(d => ({ ...d, rent: on ? undefined : o.id })); }}>
                 <div className="row">
                   {e ? <Face name={e.name} /> : null}
@@ -54,7 +55,9 @@ export function BidTab({ v, me, draft, set, locked }: P) {
         </>
       )}
 
-      <div className="sec-title">👤 採用候補 <span className="n">{g.pool.length}</span><small>契約金が一番高い会社が採用</small></div>
+      <div className="sec-title">👤 採用候補 <span className="n">{g.pool.length}</span><small>契約金が一番高い会社が採用・オフィスの空き席 {freeSeatCount(g, me) === Infinity ? '−' : `${Math.max(0, freeSeatCount(g, me))}席`}</small></div>
+      {freeSeatCount(g, me) <= 0 && <div className="warn">🪑 オフィスが満席なので採用できません（開発フェーズでオフィスを増築できます）</div>}
+      {freeSeatCount(g, me) > 0 && Object.keys(draft.hires).length + (draft.rent ? 1 : 0) > freeSeatCount(g, me) && <div className="warn">🪑 空き席{freeSeatCount(g, me)}に対して採用・レンタルの申込が{Object.keys(draft.hires).length + (draft.rent ? 1 : 0)}人。席が埋まった時点で、残りは採用できません</div>}
       {me.effects.noHire === g.q && <div className="warn">🪧 採用広告を買い占められていて、今期は採用できません</div>}
       {g.pool.map(e => {
         const fee = draft.hires[e.id];
@@ -72,7 +75,7 @@ export function BidTab({ v, me, draft, set, locked }: P) {
             {e.trait && <div style={{ marginBottom: 8 }}><TraitLine e={e} /></div>}
             <div className="seg">
               <button className={fee === undefined ? 'on' : 'off'} disabled={locked} onClick={() => set(d => { const hires = { ...d.hires }; delete hires[e.id]; return { ...d, hires }; })}>見送り</button>
-              {HIRE_FEES.map(f => <button key={f} className={fee === f ? 'on gold' : ''} disabled={locked} onClick={() => { sfx.tap(); set(d => ({ ...d, hires: { ...d.hires, [e.id]: f as HireFee } })); }}>{f}万</button>)}
+              {HIRE_FEES.map(f => <button key={f} className={fee === f ? 'on gold' : ''} disabled={locked || (fee === undefined && freeSeatCount(g, me) <= 0)} onClick={() => { sfx.tap(); set(d => ({ ...d, hires: { ...d.hires, [e.id]: f as HireFee } })); }}>{f}万</button>)}
             </div>
           </div>
         );

@@ -2,7 +2,7 @@
 //  3年で上場 ― 数値設定（バランス調整はこのファイルだけで行う）
 //  金額の単位はすべて「万円」、期間の単位は「期」（四半期）
 // =====================================================================
-import type { CardKey, FundKind, IndustryKey, TraitKey, HappeningKey, ProjectType, Skill, SpyOrder, Tag } from './types';
+import type { CardKey, FundKind, IndustryKey, TileKind, TraitKey, HappeningKey, ProjectType, Skill, SpyOrder, Tag } from './types';
 
 export const SKILLS: Skill[] = ['FE', 'BE', 'IN', 'DE', 'SE', 'AI'];
 export const SKILL_NAME: Record<Skill, string> = { FE: 'フロント', BE: 'バック', IN: 'インフラ', DE: 'デザイン', SE: 'セキュリティ', AI: 'AI' };
@@ -264,3 +264,24 @@ export const TRAIT = {
   rarityWeight: { 1: 3, 2: 2, 3: 1 } as Record<1 | 2 | 3, number>,
   fastChance: 0.3, geniusRest: 0.2, hopperQuit: 0.3, salesMult: 1.1, gambleUp: 0.1, gambleDown: 0.1,
 };
+
+// ---------- 自社オフィス（作業マスの数＝社員の上限。開発フェーズで増築・改装） ----------
+export const OFFICE = {
+  start: 6,              // 最初は 2×3 の作業マス
+  expandBase: 300, expandStep: 100,   // 増築：1マス目300、以後+100ずつ
+  remodel: 100,          // 改装（マスの種類を変える）
+  maxAddPerQ: 2, max: 20,
+  finalValue: 0.5,       // 最終決算でオフィスへの投資額の50%を資産に
+  maxEffect: 2,          // 同じ種類の特殊マスは2つまで効く
+};
+export interface TileSpec { name: string; icon: string; desc: string; short: string }
+export const TILES: Record<TileKind, TileSpec> = {
+  work: { name: '作業マス', icon: '🪑', short: '席', desc: '社員1人分の席。作業マスの数が社員の上限（借りている社員・貸し出し中の社員も席を使う）' },
+  rest: { name: '休憩室', icon: '☕', short: '休憩', desc: '研修のあと休む確率−10%（1部屋ごと）。インフルエンザの休みを50%で防ぐ' },
+  lab: { name: '研修室', icon: '📚', short: '研修', desc: '研修で特技に目覚める確率+10%（1部屋ごと）' },
+  server: { name: 'サーバールーム', icon: '🖥️', short: 'サーバ', desc: '自社サービスのLvアップに必要なスキル合計−1（1部屋ごと）' },
+  meet: { name: '会議室', icon: '🤝', short: '会議', desc: '入札の比較値−3%（1部屋ごと）' },
+  refresh: { name: 'リフレッシュ室', icon: '🎮', short: 'リフレ', desc: '案件で経験値が入るとき、20%で+1多く入る（1部屋ごと）' },
+  sec: { name: 'セキュリティ室', icon: '🔒', short: 'セキュ', desc: '妨害「情報漏洩」「技術ブログ炎上」を毎回防ぐ（カードを使わない）' },
+};
+export const TILE_FX = { restDown: 0.1, fluBlock: 0.5, labUp: 0.1, serverDown: 1, meetDown: 0.03, refreshChance: 0.2, secBlocks: ['A5', 'A7'] as CardKey[] };

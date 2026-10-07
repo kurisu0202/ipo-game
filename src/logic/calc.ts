@@ -1,6 +1,6 @@
 // ===== 計算ヘルパー（解決処理と画面の両方で使う） =====
-import { GAME, GROWTH, INDUSTRIES, INDUSTRY_BID, INDUSTRY_HIRE_BONUS, RUSH_DEBT, SERVICE, SKILLS } from './config';
-import type { ActiveProject, Company, Engineer, Game, ProjectType, Skill, Skills } from './types';
+import { GAME, GROWTH, INDUSTRIES, INDUSTRY_BID, INDUSTRY_HIRE_BONUS, OFFICE, RUSH_DEBT, SERVICE, SKILLS, TILE_FX } from './config';
+import type { ActiveProject, Company, Engineer, Game, ProjectType, Skill, Skills, TileKind } from './types';
 
 /** このゲームの全期数と年数 */
 export const totalQ = (g: { quarters?: number }) => g.quarters || GAME.quarters;
@@ -91,7 +91,7 @@ export function boostAll(e: Engineer) {
 }
 
 export function serviceNeed(c: Company) {
-  return SERVICE.needBase + (c.service?.level || 0);
+  return Math.max(1, SERVICE.needBase + (c.service?.level || 0) - TILE_FX.serverDown * rooms(c, 'server'));
 }
 export function servicePower(g: Game, c: Company, assign?: Record<string, string>, real = false) {
   return skillSum(sumSkills(g, c, assignees(c, 'svc', assign), real));
@@ -129,3 +129,15 @@ export const launchCost = (c: Pick<Company, 'industry'>) => round10(SERVICE.laun
 export const serviceIncome = (c: Pick<Company, 'industry'>, lv: number) => round10(SERVICE.income[lv] * (industryOf(c)?.serviceMult ?? 1));
 export const salaryMult = (c: Pick<Company, 'industry'>) => industryOf(c)?.salaryMult ?? 1;
 export const rushDebt = (c: Pick<Company, 'industry'>) => industryOf(c)?.rushDebt ?? RUSH_DEBT;
+
+// ---------- オフィス ----------
+/** 特殊マスの効く数（同じ種類は OFFICE.maxEffect まで） */
+export const rooms = (c: Pick<Company, 'office'>, k: TileKind) => Math.min(OFFICE.maxEffect, (c.office?.tiles || []).filter(t => t === k).length);
+/** 作業マスの数＝席の数（オフィスがない古いデータは上限なし） */
+export const seats = (c: Pick<Company, 'office'>) => (c.office ? c.office.tiles.filter(t => t === 'work').length : Infinity);
+/** 席を使っている人数：自社の社員（貸し出し中を含む）＋借りている社員 */
+export const seatsUsed = (g: Game, c: Company) => payroll(g, c).length + c.engineers.filter(e => e.loan).length;
+export const freeSeats = (g: Game, c: Company) => seats(c) - seatsUsed(g, c);
+/** n 回目（0始まり）の増築費用 */
+export const expandCost = (c: Pick<Company, 'office'>, n = 0) => OFFICE.expandBase + OFFICE.expandStep * (Math.max(0, (c.office?.tiles.length || OFFICE.start) - OFFICE.start) + n);
+export const officeValue = (c: Pick<Company, 'office'>) => round10((c.office?.spent || 0) * OFFICE.finalValue);

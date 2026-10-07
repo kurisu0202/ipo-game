@@ -7,6 +7,8 @@ export type CardKey = 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7' | 'A8' | 'A
 export type HappeningKey = 'H1' | 'H2' | 'H3' | 'H4' | 'H5' | 'H6' | 'H7' | 'H8' | 'H9' | 'H10' | 'H11' | 'H12' | 'H13' | 'H14' | 'H15' | 'H16' | 'H17' | 'H18';
 export type IndustryKey = 'sier' | 'web' | 'saas' | 'ai' | 'maint' | 'consul';
 export type TraitKey = 'multi' | 'fast' | 'fire' | 'night' | 'refactor' | 'leader' | 'mentor' | 'mood' | 'sales' | 'cheap' | 'investor' | 'genius' | 'hopper' | 'tough' | 'study' | 'gambler';
+export type TileKind = 'work' | 'rest' | 'lab' | 'server' | 'meet' | 'refresh' | 'sec';
+export interface Office { tiles: TileKind[]; spent: number }
 export type FundKind = 'bond' | 'index' | 'growth' | 'estate' | 'crypto' | 'angel';
 export interface Fund { id: string; kind: FundKind; name: string; mult?: number }   // mult は冬に決まる
 export interface Holding { fund: string; amount: number }
@@ -52,6 +54,7 @@ export interface Company {
   spyOrdersLeft: number; honestLoans: number; honestAwarded: boolean;
   industry?: IndustryKey;          // 選んだ業種
   invest?: Holding[];              // 今年の投資（冬の決算で結果が出る。本人だけに見える）
+  office?: Office;                 // 自社オフィス（作業マスの数＝社員の上限）
   choices?: IndustryKey[];         // 配られた業種の候補（本人だけに見える）
   secretNotes: string[];
   quarterStartCash: number;
@@ -81,6 +84,7 @@ export interface DevSubmit {
   assign: Record<string, string | 'svc' | '' | 'fire' | 'train'>;
   train?: Record<string, Skill>;   // 研修に行かせる社員 → 伸ばすスキル
   invest?: Record<string, number>; // 投資先 → 金額
+  office?: { add: TileKind[]; remodel: Record<string, TileKind> };   // オフィスの増築・改装
   rush: string[];
   drop?: string[];   // 放棄する案件
   launch: boolean;
@@ -127,7 +131,7 @@ export interface RevealBlock {
 export interface Reveal { kind: 'pick' | 'bid' | 'dev' | 'final'; q: number; title: string; blocks: RevealBlock[]; headlines: string[] }
 
 export interface FinalRow {
-  id: string; name: string; cash: number; service: number; stocks: number[]; stockTotal: number; total: number; profit: number; rank: number;
+  id: string; name: string; cash: number; service: number; stocks: number[]; stockTotal: number; office?: number; total: number; profit: number; rank: number;
   awards: string[];
 }
 

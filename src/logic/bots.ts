@@ -1,6 +1,6 @@
 // ===== テスト用ボット（ランダム／賢い） =====
 import { BID_PCTS, CARDS, HIRE_FEES, PROJECT_TYPES, SKILLS } from './config';
-import { companyOf, projectCheck, skillSum, sumSkills, checkReqs } from './calc';
+import { companyOf, freeSeats, projectCheck, skillSum, sumSkills, checkReqs } from './calc';
 import { defaultDev, emptyBid, pendingSpies } from './game';
 import type { BidPct, BidSubmit, Company, DevSubmit, Game, HireFee, PickSubmit, Skill, SpyOrder } from './types';
 
@@ -74,7 +74,7 @@ export function smartBid(g: Game, cid: string, r: R): BidSubmit {
     SKILLS.forEach(k => { free[k] = (free[k] || 0) - (p.reqs[k] || 0); });
     taken++;
   }
-  if (c.cash > 400) {
+  if (c.cash > 400 && freeSeats(g, c) > 0) {
     const best = [...g.pool].sort((a, b) => skillSum(b.skills) / b.salary - skillSum(a.skills) / a.salary)[0];
     if (best && c.engineers.length < 8) s.hires[best.id] = best.legend ? 200 : 50;
   }
@@ -113,6 +113,7 @@ export function smartDev(g: Game, cid: string, _r: R): DevSubmit {
     }
   }
   if (!c.service && c.cash > 900) s.launch = true;
+  if (freeSeats(g, c) <= 0 && c.cash > 1500) s.office = { add: ['work'], remodel: {} };
   if (c.service || s.launch) [...free].slice(0, 2).forEach(id => { s.assign[id] = 'svc'; free.delete(id); });
   c.projects.forEach(p => { if (g.q > p.deadline - 1 && p.work - p.progress >= 2 && c.debt < 3 && projectCheck(g, c, p, s.assign).ok) s.rush.push(p.id); });
   pendingSpies(g, cid).forEach(x => { s.spyOrders[x.engineer.id] = 'steal'; });

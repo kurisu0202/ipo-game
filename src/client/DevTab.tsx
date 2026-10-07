@@ -6,6 +6,7 @@ import { abandonFee, canTrain, pendingSpies } from '../logic/game';
 import type { ActiveProject, Company, DevSubmit, Engineer, Game, Skill, SpyOrder } from '../logic/types';
 import type { PlayerView } from '../logic/view';
 import { Coach, SecretFile } from './parts';
+import { OfficeView, planOffice } from './Office';
 import { sfx } from './fx/sound';
 import { Face, Sheet, SkillChips } from './ui';
 
@@ -85,6 +86,9 @@ export function DevTab({ v, me, draft, set, locked }: P) {
       <ServiceCard g={g} me={me} draft={draft} assign={assign} locked={locked} onOpen={() => setSheet('svc')} onRemove={eid => setAssign(eid, '')}
         onLaunch={() => { sfx.coin(); set(d => ({ ...d, launch: !d.launch, assign: d.launch ? Object.fromEntries(Object.entries(d.assign).map(([k, x]) => [k, x === 'svc' ? '' : x])) : d.assign })); }} />
 
+      <div className="sec-title">🏢 オフィス <small>作業マスの数が社員の上限・特殊マスで効果</small></div>
+      <div className="card"><OfficeView g={g} me={me} plan={draft.office} editable={!locked} onPlan={o => { sfx.tap(); set(d => ({ ...d, office: o.add.length || Object.keys(o.remodel).length ? o : undefined })); }} /></div>
+
       <TrainCard g={g} me={me} draft={draft} locked={locked}
         onTrain={(eid, k) => { sfx.tap(); set(d => ({ ...d, assign: { ...d.assign, [eid]: 'train' }, train: { ...(d.train || {}), [eid]: k } })); }}
         onCancel={eid => { sfx.tap(); set(d => { const t = { ...(d.train || {}) }; delete t[eid]; return { ...d, assign: { ...d.assign, [eid]: '' }, train: t }; }); }} />
@@ -136,7 +140,7 @@ function InvestCard({ g, me, draft, locked, onSet }: { g: Game; me: Company; dra
   if (!funds.length) return null;
   const plan = draft.invest || {};
   const planned = Object.values(plan).reduce((t, v) => t + v, 0);
-  const left = Math.max(0, me.cash) - planned;
+  const left = Math.max(0, me.cash) - planned - (draft.office ? planOffice(me, draft.office).cost : 0);
   const held = (fid: string) => (me.invest || []).filter(h => h.fund === fid).reduce((t, h) => t + h.amount, 0);
   const heldAll = (me.invest || []).reduce((t, h) => t + h.amount, 0);
   const toWinter = 3 - season(g.q);
@@ -553,6 +557,8 @@ export function devSummary(g: Game, me: Company, d: DevSubmit) {
   if (d.rush.length) parts.push({ t: `突貫 ${d.rush.length}件`, w: true });
   if (fired) parts.push({ t: `解雇 ${fired}人`, w: true });
   if (trained) parts.push({ t: `研修 ${trained}人` });
+  const work = d.office ? planOffice(me, d.office).cost : 0;
+  if (work) parts.push({ t: `工事 ${work.toLocaleString()}` });
   const inv = Object.values(d.invest || {}).reduce((t, v) => t + v, 0);
   if (inv) parts.push({ t: `投資 ${inv.toLocaleString()}` });
   if (d.launch) parts.push({ t: 'サービス立ち上げ' });

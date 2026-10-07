@@ -517,3 +517,46 @@ describe('特技（★1の追加分）', () => {
     expect({ up, down }).toEqual({ up: true, down: true });
   });
 });
+
+describe('オフィス', () => {
+  it('最初は2×3の作業マス。満席だと採用もレンタルもできない', () => {
+    const g = two(); cleanHands(g);
+    const a = co(g, 'a');
+    expect(a.office!.tiles).toEqual(Array(6).fill('work'));
+    a.engineers = Array.from({ length: 6 }, (_, i) => eng(`x${i}`, { BE: 1 }));
+    const cand = eng('new', { FE: 3 }, { salary: 50 });
+    g.pool = [cand];
+    g.market = [];
+    bidOnly(g, { a: { hires: { new: 400 } }, b: { hires: { new: 0 } } });
+    expect(co(g, 'b').engineers.some(e => e.id === 'new')).toBe(true);   // a は席がないので b が採用
+  });
+  it('増築は1マス目300・2マス目400。使っている席より作業マスは減らせない', () => {
+    const g = two(); cleanHands(g); g.phase = 'dev';
+    const a = co(g, 'a');
+    a.cash = 2000;
+    a.engineers = Array.from({ length: 6 }, (_, i) => eng(`x${i}`, { BE: 1 }));
+    const bad = defaultDev(g, 'a'); bad.office = { add: [], remodel: { 0: 'meet' } };
+    submit(g, 'a', bad);
+    expect(g.devSubs.a.office).toBeUndefined();   // 6人いるので作業マスを減らせない
+    const s = defaultDev(g, 'a'); s.office = { add: ['work', 'meet', 'lab'], remodel: {} };
+    submit(g, 'a', s);
+    expect(g.devSubs.a.office!.add).toEqual(['work', 'meet']);   // 1期に2マスまで
+    submit(g, 'b', defaultDev(g, 'b'));
+    resolveDev(g);
+    expect(a.office!.tiles.length).toBe(8);
+    expect(a.office!.spent).toBe(700);
+  });
+  it('セキュリティ室は情報漏洩を毎回防ぐ・最終決算でオフィス投資額の50%が資産', () => {
+    const g = two(); cleanHands(g);
+    co(g, 'b').office!.tiles[0] = 'sec';
+    co(g, 'a').hand = ['A5'];
+    g.market = [];
+    bidOnly(g, { a: { card: 'A5', target: 'b' } });
+    expect(co(g, 'b').effects.noBid).toBeUndefined();
+    const g2 = createGame([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], 5, 'x', 8, false);
+    co(g2, 'a').office!.spent = 1000;
+    g2.q = 7; g2.phase = 'dev';
+    devOnly(g2);
+    expect(g2.final!.find(r => r.id === 'a')!.office).toBe(500);
+  });
+});
