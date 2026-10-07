@@ -2,7 +2,7 @@
 //  3年で上場 ― 数値設定（バランス調整はこのファイルだけで行う）
 //  金額の単位はすべて「万円」、期間の単位は「期」（四半期）
 // =====================================================================
-import type { CardKey, FundKind, IndustryKey, TileKind, TraitKey, HappeningKey, ProjectType, Skill, SpyOrder, Tag } from './types';
+import type { CardKey, FundKind, IndustryKey, ItemKind, TraitKey, HappeningKey, ProjectType, Skill, SpyOrder, Tag } from './types';
 
 export const SKILLS: Skill[] = ['FE', 'BE', 'IN', 'DE', 'SE', 'AI'];
 export const SKILL_NAME: Record<Skill, string> = { FE: 'フロント', BE: 'バック', IN: 'インフラ', DE: 'デザイン', SE: 'セキュリティ', AI: 'AI' };
@@ -265,26 +265,26 @@ export const TRAIT = {
   fastChance: 0.3, geniusRest: 0.2, hopperQuit: 0.3, salesMult: 1.1, gambleUp: 0.1, gambleDown: 0.1,
 };
 
-// ---------- 自社オフィス（作業マスの数＝社員の上限。開発フェーズで増築・改装） ----------
+// ---------- 自社オフィス（床のマス目にデスクや部屋を置く。デスクの数＝社員の上限） ----------
 export const OFFICE = {
-  start: 6,              // 最初は 2×3 の作業マス
-  expandBase: 300, expandStep: 100,   // 増築：1マス目300、以後+100ずつ
-  remodel: 100,          // 改装（マスの種類を変える）
-  maxAddPerQ: 2, max: 20,
-  finalValue: 0.5,       // 最終決算でオフィスへの投資額の50%を資産に
-  maxEffect: 2,          // 同じ種類の特殊マスは2つまで効く
+  startW: 3, startH: 2, maxW: 5, maxH: 5,
+  expandBase: 300, expandStep: 150,   // 増床（1行／1列）：300、450、600…
+  move: 100,                          // 置いたものを動かす・回す・撤去する（1つにつき）
+  finalValue: 0.5,                    // 最終決算でオフィスにかけたお金の50%が資産
+  maxEffect: 2,                       // 会社全体に効く部屋は、同じ種類2つまで
 };
-export interface TileSpec { name: string; icon: string; desc: string; short: string }
-export const TILES: Record<TileKind, TileSpec> = {
-  work: { name: '作業マス', icon: '🪑', short: '席', desc: '社員1人分の席。作業マスの数が社員の上限（借りている社員・貸し出し中の社員も席を使う）' },
-  rest: { name: '休憩室', icon: '☕', short: '休憩', desc: '研修のあと休む確率−10%（1部屋ごと）。インフルエンザの休みを50%で防ぐ' },
-  lab: { name: '研修室', icon: '📚', short: '研修', desc: '研修で特技に目覚める確率+10%（1部屋ごと）' },
-  server: { name: 'サーバールーム', icon: '🖥️', short: 'サーバ', desc: '自社サービスのLvアップに必要なスキル合計−1（1部屋ごと）' },
-  meet: { name: '会議室', icon: '🤝', short: '会議', desc: '入札の比較値−3%（1部屋ごと）' },
-  refresh: { name: 'リフレッシュ室', icon: '🎮', short: 'リフレ', desc: '案件で経験値が入るとき、20%で+1多く入る（1部屋ごと）' },
-  sec: { name: 'セキュリティ室', icon: '🔒', short: 'セキュ', desc: '妨害「情報漏洩」「技術ブログ炎上」を毎回防ぐ（カードを使わない）' },
+export interface ItemSpec { name: string; icon: string; cells: [number, number][]; cost: number; desc: string; adj?: boolean; short: string }
+export const ITEMS: Record<ItemKind, ItemSpec> = {
+  desk: { name: 'デスク', icon: '🪑', short: '席', cells: [[0, 0]], cost: 50, desc: '社員1人分の席。デスクの数が社員の上限（借りている社員・貸し出し中の社員も席を使う）' },
+  sec: { name: 'セキュリティ室', icon: '🔒', short: 'セキュ', cells: [[0, 0]], cost: 200, desc: '会社全体：妨害「情報漏洩」「技術ブログ炎上」をカードなしで毎回防ぐ' },
+  rest: { name: '休憩室', icon: '☕', short: '休憩室', cells: [[0, 0], [1, 0]], cost: 200, adj: true, desc: 'となりのデスクの社員：研修のあと休む確率−20%・インフルエンザで休まない・天才肌の気まぐれ半分' },
+  meet: { name: '会議室', icon: '🤝', short: '会議室', cells: [[0, 0], [1, 0]], cost: 250, desc: '会社全体：入札の比較値−3%' },
+  server: { name: 'サーバールーム', icon: '🖥️', short: 'サーバ', cells: [[0, 0], [0, 1]], cost: 250, desc: '会社全体：自社サービスのLvアップに必要なスキル合計−1' },
+  refresh: { name: 'リフレッシュ室', icon: '🎮', short: 'リフレ', cells: [[0, 0], [0, 1], [1, 1]], cost: 300, adj: true, desc: 'となりのデスクの社員：案件で経験値が入るとき、50%で+1多く入る' },
+  lab: { name: '研修室', icon: '📚', short: '研修室', cells: [[0, 0], [1, 0], [0, 1], [1, 1]], cost: 400, adj: true, desc: 'となりのデスクの社員：研修で特技に目覚める確率+20%' },
+  bigmeet: { name: '大会議室', icon: '🏛️', short: '大会議室', cells: [[0, 0], [1, 0], [0, 1], [1, 1]], cost: 500, desc: '会社全体：入札の比較値−6%（会議室と合わせて最大−9%）' },
 };
-export const TILE_FX = { restDown: 0.1, fluBlock: 0.5, labUp: 0.1, serverDown: 1, meetDown: 0.03, refreshChance: 0.2, secBlocks: ['A5', 'A7'] as CardKey[] };
+export const OFFICE_FX = { restAdjDown: 0.2, labAdjUp: 0.2, refreshAdj: 0.5, meetDown: 0.03, bigMeetDown: 0.06, meetCap: 0.09, serverDown: 1, secBlocks: ['A5', 'A7'] as CardKey[] };
 
 // ---------- 広告（入札フェーズで1期1回。お金で評判を上げる。広告の評判は maxRep まで上乗せでき、その年の冬の決算で消える） ----------
 export const ADS = [

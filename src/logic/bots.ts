@@ -2,6 +2,7 @@
 import { BID_PCTS, CARDS, HIRE_FEES, PROJECT_TYPES, SKILLS } from './config';
 import { companyOf, freeSeats, projectCheck, skillSum, sumSkills, checkReqs } from './calc';
 import { defaultDev, emptyBid, pendingSpies } from './game';
+import { autoDeskPlan } from './office';
 import type { BidPct, BidSubmit, Company, DevSubmit, Game, HireFee, PickSubmit, Skill, SpyOrder } from './types';
 
 type R = () => number;
@@ -114,7 +115,7 @@ export function smartDev(g: Game, cid: string, _r: R): DevSubmit {
     }
   }
   if (!c.service && c.cash > 900) s.launch = true;
-  if (freeSeats(g, c) <= 0 && c.cash > 1500) s.office = { add: ['work'], remodel: {} };
+  if (freeSeats(g, c) <= 0 && c.cash > 1500 && c.office?.items) { const plan = autoDeskPlan(c.office); if (plan) s.office = plan; }
   if (c.service || s.launch) [...free].slice(0, 2).forEach(id => { s.assign[id] = 'svc'; free.delete(id); });
   c.projects.forEach(p => { if (g.q > p.deadline - 1 && p.work - p.progress >= 2 && c.debt < 3 && projectCheck(g, c, p, s.assign).ok) s.rush.push(p.id); });
   pendingSpies(g, cid).forEach(x => { s.spyOrders[x.engineer.id] = 'steal'; });

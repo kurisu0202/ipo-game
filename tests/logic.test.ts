@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createGame, defaultDev, emptyBid, grantTrait, resolveBid, resolveDev, submit, tryResolve } from '../src/logic/game';
 import { viewFor } from '../src/logic/view';
 import { TRAINING } from '../src/logic/config';
+import { checkPlan, expandCost, nextTo, shape, upgradeOffice } from '../src/logic/office';
 import { projectCheck } from '../src/logic/calc';
 import type { ActiveProject, BidSubmit, Company, Engineer, Game, Project } from '../src/logic/types';
 
@@ -519,45 +520,68 @@ describe('特技（★1の追加分）', () => {
 });
 
 describe('オフィス', () => {
-  it('最初は2×3の作業マス。満席だと採用もレンタルもできない', () => {
+  it('最初は3×2のデスク。満席だと採用もできない', () => {
     const g = two(); cleanHands(g);
     const a = co(g, 'a');
-    expect(a.office!.tiles).toEqual(Array(6).fill('work'));
+    expect([a.office!.w, a.office!.h, a.office!.items.filter(i => i.kind === 'desk').length]).toEqual([3, 2, 6]);
     a.engineers = Array.from({ length: 6 }, (_, i) => eng(`x${i}`, { BE: 1 }));
-    const cand = eng('new', { FE: 3 }, { salary: 50 });
-    g.pool = [cand];
+    g.pool = [eng('new', { FE: 3 }, { salary: 50 })];
     g.market = [];
     bidOnly(g, { a: { hires: { new: 400 } }, b: { hires: { new: 0 } } });
-    expect(co(g, 'b').engineers.some(e => e.id === 'new')).toBe(true);   // a は席がないので b が採用
+    expect(co(g, 'b').engineers.some(e => e.id === 'new')).toBe(true);
   });
-  it('増築は1マス目300・2マス目400。使っている席より作業マスは減らせない', () => {
+  it('形と回転：サーバールームは縦長、回すと横長。L字は4通り', () => {
+    expect(shape('server', 0)).toEqual([[0, 0], [0, 1]]);
+    expect(shape('server', 1).sort()).toEqual([[0, 0], [1, 0]]);
+    const ls = [0, 1, 2, 3].map(r => JSON.stringify(shape('refresh', r).sort()));
+    expect(new Set(ls).size).toBe(4);
+  });
+  it('増床・設置・重なり・デスクを減らしすぎない', () => {
     const g = two(); cleanHands(g); g.phase = 'dev';
     const a = co(g, 'a');
-    a.cash = 2000;
+    a.cash = 3000;
     a.engineers = Array.from({ length: 6 }, (_, i) => eng(`x${i}`, { BE: 1 }));
-    const bad = defaultDev(g, 'a'); bad.office = { add: [], remodel: { 0: 'meet' } };
-    submit(g, 'a', bad);
-    expect(g.devSubs.a.office).toBeUndefined();   // 6人いるので作業マスを減らせない
-    const s = defaultDev(g, 'a'); s.office = { add: ['work', 'meet', 'lab'], remodel: {} };
-    submit(g, 'a', s);
-    expect(g.devSubs.a.office!.add).toEqual(['work', 'meet']);   // 1期に2マスまで
-    submit(g, 'b', defaultDev(g, 'b'));
+    expect(checkPlan(g, a, { remove: ['d1'], move: [], place: [] }).ok).toBe(false);   // 6人いるのでデスクは減らせない
+    expect(checkPlan(g, a, { remove: [], move: [], place: [{ kind: 'meet', x: 0, y: 0, rot: 0 }] }).ok).toBe(false);   // 重なる
+    const plan = { expand: 'row' as const, remove: [], move: [], place: [{ kind: 'meet' as const, x: 0, y: 2, rot: 0 }, { kind: 'desk' as const, x: 2, y: 2, rot: 0 }] };
+    expect(checkPlan(g, a, plan)).toEqual({ ok: true, cost: 300 + 250 + 50 });
+    const s = defaultDev(g, 'a'); s.office = plan;
+    submit(g, 'a', s); submit(g, 'b', defaultDev(g, 'b'));
     resolveDev(g);
-    expect(a.office!.tiles.length).toBe(8);
-    expect(a.office!.spent).toBe(700);
+    expect([a.office!.w, a.office!.h]).toEqual([3, 3]);
+    expect(a.office!.items.filter(i => i.kind === 'desk').length).toBe(7);
+    expect(a.office!.spent).toBe(600);
+    expect(expandCost(a.office!)).toBe(450);
+  });
+  it('となりのデスクの社員だけに効く', () => {
+    const g = two(); cleanHands(g);
+    const a = co(g, 'a');
+    a.engineers = [eng('near', { BE: 1 }), eng('far', { BE: 1 })];
+    a.office!.h = 3;
+    a.office!.items.push({ id: 'r9', kind: 'rest', x: 0, y: 2, rot: 0 });   // (0,2)-(1,2)
+    a.office!.seats = { d4: 'near', d3: 'far' };   // d4=(0,1) は休憩室のとなり、d3=(2,0) は離れている
+    expect(nextTo(g, a, 'near', 'rest')).toBe(true);
+    expect(nextTo(g, a, 'far', 'rest')).toBe(false);
   });
   it('セキュリティ室は情報漏洩を毎回防ぐ・最終決算でオフィス投資額の50%が資産', () => {
     const g = two(); cleanHands(g);
-    co(g, 'b').office!.tiles[0] = 'sec';
+    const b = co(g, 'b');
+    b.office!.items = b.office!.items.filter(i => i.id !== 'd6');
+    b.office!.items.push({ id: 's1', kind: 'sec', x: 2, y: 1, rot: 0 });
     co(g, 'a').hand = ['A5'];
     g.market = [];
     bidOnly(g, { a: { card: 'A5', target: 'b' } });
-    expect(co(g, 'b').effects.noBid).toBeUndefined();
+    expect(b.effects.noBid).toBeUndefined();
     const g2 = createGame([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], 5, 'x', 8, false);
     co(g2, 'a').office!.spent = 1000;
     g2.q = 7; g2.phase = 'dev';
     devOnly(g2);
     expect(g2.final!.find(r => r.id === 'a')!.office).toBe(500);
+  });
+  it('古い形式（1マス1部屋）のオフィスは、同じ数のデスクに作り直す', () => {
+    const o = upgradeOffice({ tiles: ['work', 'work', 'work', 'work', 'work', 'work', 'rest', 'sec'], spent: 700 }, 5);
+    expect(o.items.filter(i => i.kind === 'desk').length).toBe(8);
+    expect(o.spent).toBe(700);
   });
 });
 

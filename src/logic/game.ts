@@ -3,7 +3,7 @@
 //  すべての乱数は g.seed から作るので、同じ入力なら同じ結果になる
 // =====================================================================
 import {
-  ABANDON, ACCUSE, AD, ADS, FUNDS, GROWTH, INDUSTRIES, INVEST, OFFICE, TILES, TILE_FX, TRAINING, TRAIT, TRAITS, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
+  ABANDON, ACCUSE, AD, ADS, FUNDS, GROWTH, INDUSTRIES, INVEST, OFFICE_FX, TRAINING, TRAIT, TRAITS, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
   EMPLOYEE_EVENT, ENGINEER, FIRE_DEBT, FIRST_NAMES, GAME, HACKATHON, HAPPENINGS, HAPPENING_FX, HIRE_FEES, INCIDENT,
   INTERIM, INTEREST, INVESTIGATE_COST, LAST_NAMES, LATE_PENALTY, MUST_SHARE, PROJECT_TYPES, REMOTE_SALARY, RENTAL, REPEAT_BONUS,
   REP_DISCOUNT, SECRET_MULTS, SERVICE, SEVERANCE_QUARTERS, SKILLS, SKILL_NAME, SPY_STEAL,
@@ -15,11 +15,12 @@ import {
   signedYen, skillSum, sumSkills, totalQ, totalYears, working, yen,
   bidFactor, canBid, hireBonus, launchCost, payFactor, rushDebt, salaryMult, serviceIncome,
   boostAll, hasSlot, projectSums, slots,
-  expandCost, freeSeats, officeValue, rooms, seatsUsed,
+  freeSeats, meetDiscount, officeValue, rooms, seatsUsed,
 } from './calc';
 import { chance, int, next, pick, shuffle, weighted } from './rng';
+import { applyPlan, checkPlan, newOffice, nextTo, upgradeOffice } from './office';
 import type {
-  ActiveProject, BidPct, BidSubmit, Fund, FundKind, IndustryKey, PickSubmit, TileKind, TraitKey, CardKey, Company, DevSubmit, Engineer, FinalRow, Game, HappeningKey, HireFee,
+  ActiveProject, BidPct, BidSubmit, Fund, FundKind, IndustryKey, OfficePlan, PickSubmit, TraitKey, CardKey, Company, DevSubmit, Engineer, FinalRow, Game, HappeningKey, HireFee,
   Project, ProjectType, RevealBlock, RevealLine, Skill, Skills, SpyOrder, Tag,
 } from './types';
 
@@ -164,7 +165,7 @@ export function createGame(players: { id: string; name: string }[], seed: number
       hand: [], stocks: [], aiKnowhow: 0, effects: {}, trolls: [], hitsThisQuarter: 0, yearProfit: 0, completed: 0,
       sleeper: null, spyOrdersLeft: GAME.spyOrders, honestLoans: 0, honestAwarded: false, secretNotes: [],
       quarterStartCash: GAME.startCash, history: [GAME.startCash],
-      office: { tiles: Array<TileKind>(OFFICE.start).fill('work'), spent: 0 },
+      office: newOffice(),
       stats: { attacks: 0, hitsTaken: 0, blocks: 0, wins: 0, spies: 0, caught: 0, rushes: 0, maxDebt: 0, hires: 0, fired: 0, biggestDeal: 0 },
     };
     for (const se of GAME.startEngineers) {
@@ -231,11 +232,11 @@ export function startQuarter(g: Game) {
   const hs = HAPPENINGS[h];
   g.companies.forEach(c => { c.hitsThisQuarter = 0; c.quarterStartCash = c.cash; });
   if (season(g.q) === 0 || !g.funds) g.funds = newFunds(g);
-  g.companies.forEach(c => { if (!c.office) c.office = { tiles: Array<TileKind>(Math.max(OFFICE.start, seatsUsed(g, c))).fill('work'), spent: 0 }; });
+  g.companies.forEach(c => { if (!c.office?.items) c.office = upgradeOffice(c.office, seatsUsed(g, c)); });
   g.companies.forEach(c => {
     const mood = c.engineers.some(e => e.trait === 'mood');
     c.engineers.forEach(e => {
-      if (e.trait === 'genius' && e.restQ !== g.q && chance(g, TRAIT.geniusRest * (mood ? 0.5 : 1))) { e.restQ = g.q; log(g, `${c.name}：${e.name}（天才肌）は気分が乗らず今期は休み`); }
+      if (e.trait === 'genius' && e.restQ !== g.q && chance(g, TRAIT.geniusRest * (mood ? 0.5 : 1) * (nextTo(g, c, e.id, 'rest') ? 0.5 : 1))) { e.restQ = g.q; log(g, `${c.name}：${e.name}（天才肌）は気分が乗らず今期は休み`); }
     });
   });
   log(g, `━━ ${quarterLabel(g.q)}（第${g.q + 1}期）━━ ハプニング「${hs.name}」`);
@@ -268,7 +269,7 @@ export function startQuarter(g: Game) {
       break;
     }
     case 'H7': g.companies.forEach(c => { const v = c.engineers.length * HAPPENING_FX.rentPerHead; c.cash -= v; log(g, `${c.name}：賃料 −${v}`); }); break;
-    case 'H8': g.companies.forEach(c => { if (!c.engineers.length) return; if (c.engineers.some(x => x.trait === 'mood')) { log(g, `${c.name}：ムードメーカーのおかげでインフルエンザの休みなし`); return; } if (rooms(c, 'rest') && chance(g, TILE_FX.fluBlock)) { log(g, `${c.name}：休憩室のおかげでインフルエンザの休みなし`); return; } const e = pick(g, c.engineers); e.restQ = g.q; log(g, `${c.name}：${e.name} がインフルエンザで休み`); }); break;
+    case 'H8': g.companies.forEach(c => { if (!c.engineers.length) return; if (c.engineers.some(x => x.trait === 'mood')) { log(g, `${c.name}：ムードメーカーのおかげでインフルエンザの休みなし`); return; } const e = pick(g, c.engineers); if (nextTo(g, c, e.id, 'rest')) { log(g, `${c.name}：${e.name}は休憩室のとなりの席でインフルエンザを防いだ`); return; } e.restQ = g.q; log(g, `${c.name}：${e.name} がインフルエンザで休み`); }); break;
     case 'H10': g.companies.forEach(c => c.projects.forEach(p => { p.deadline++; })); break;
     case 'H13': g.companies.forEach(c => { if (c.service && c.service.level >= 1) { c.cash += HAPPENING_FX.subsidy; log(g, `${c.name}：補助金 +${HAPPENING_FX.subsidy}`); } }); break;
     case 'H14': pool.push(genEngineer(g, 'legend')); break;
@@ -367,21 +368,18 @@ function cleanDev(g: Game, cid: string, s: DevSubmit): DevSubmit {
   if (s.investigate && own(s.investigate)?.via) out.investigate = s.investigate;
   if (s.accuse && own(s.accuse)?.via) out.accuse = s.accuse;
   out.spyOrders = cleanOrders(g, cid, s.spyOrders);
-  // オフィス：改装と増築。費用は手元の現金まで。使っている席は減らせない
+  // オフィス：増床・撤去・移動・設置・席替え。費用は手元の現金まで。デスクは使っている席より減らせない
   let officeCost = 0;
-  if (s.office && c.office) {
-    const tiles = [...c.office.tiles];
-    const remodel: Record<string, TileKind> = {};
-    for (const [i, k] of Object.entries(s.office.remodel || {})) {
-      const n = Number(i);
-      if (!(k in TILES) || !Number.isInteger(n) || n < 0 || n >= tiles.length || tiles[n] === k) continue;
-      tiles[n] = k; remodel[i] = k; officeCost += OFFICE.remodel;
-    }
-    const add = (s.office.add || []).filter(k => k in TILES).slice(0, Math.max(0, Math.min(OFFICE.maxAddPerQ, OFFICE.max - tiles.length)));
-    add.forEach((k, n) => { tiles.push(k); officeCost += expandCost(c, n); });
-    const ok = (add.length || Object.keys(remodel).length) && officeCost <= Math.max(0, c.cash) && tiles.filter(t => t === 'work').length >= seatsUsed(g, c);
-    if (ok) out.office = { add, remodel };
-    else officeCost = 0;
+  if (s.office && c.office?.items) {
+    const plan: OfficePlan = {
+      expand: s.office.expand === 'row' || s.office.expand === 'col' ? s.office.expand : undefined,
+      remove: (s.office.remove || []).filter(x => typeof x === 'string'),
+      move: (s.office.move || []).map(m => ({ id: String(m.id), x: Number(m.x) | 0, y: Number(m.y) | 0, rot: Number(m.rot) | 0 })),
+      place: (s.office.place || []).map(m => ({ kind: m.kind, x: Number(m.x) | 0, y: Number(m.y) | 0, rot: Number(m.rot) | 0 })),
+      seats: s.office.seats ? Object.fromEntries(Object.entries(s.office.seats).filter(([, v]) => typeof v === 'string')) : undefined,
+    };
+    const chk = checkPlan(g, c, plan);
+    if (chk.ok) { out.office = plan; officeCost = chk.cost; }
   }
   // 投資：今年の候補に、決まった金額だけ。合計は手元の現金まで（オフィス工事の分を引いた残り）
   let left = Math.max(0, c.cash) - officeCost;
@@ -553,7 +551,7 @@ export function resolveBid(g: Game) {
     const def = companyOf(g, s.target!)!;
     atk.stats.attacks++;
     const lines: RevealLine[] = [{ text: `${atk.name} が「${cs.name}」を ${def.name} に！`, card }];
-    const secured = TILE_FX.secBlocks.includes(card) && rooms(def, 'sec') > 0;
+    const secured = OFFICE_FX.secBlocks.includes(card) && rooms(def, 'sec') > 0;
     const dk = secured ? undefined : DEFENSE_ORDER.find(d => def.hand.includes(d) && CARDS[d].blocks!.includes(card));
     let stamp: RevealBlock['stamp'];
     if (secured) {
@@ -642,7 +640,7 @@ export function resolveBid(g: Game) {
       if (!pct) return;
       const banned = c.effects.noBid === q;
       const amount = bidAmount(p.budget, pct, c.effects.dump === q);
-      entries.push({ c, amount, cmp: amount * (1 - REP_DISCOUNT * c.rep) * bidFactor(c, p.type) * (1 - TILE_FX.meetDown * rooms(c, 'meet')), banned });
+      entries.push({ c, amount, cmp: amount * (1 - REP_DISCOUNT * c.rep) * bidFactor(c, p.type) * (1 - meetDiscount(c)), banned });
     });
     const valid = entries.filter(x => !x.banned);
     const spec = PROJECT_TYPES[p.type];
@@ -749,12 +747,12 @@ function doTraining(g: Game, c: Company, s: DevSubmit, L: (c: Company, text: str
     e.salary += TRAINING.raise;
     e.trainedQ = g.q;
     if (TRAINING.fee) c.cash -= TRAINING.fee;
-    if (!e.trait && chance(g, TRAIT.train + TILE_FX.labUp * rooms(c, 'lab'))) {
+    if (!e.trait && chance(g, TRAIT.train + (nextTo(g, c, e.id, 'lab') ? OFFICE_FX.labAdjUp : 0))) {
       grantTrait(e, rollTrait(g));
       L(c, `✨ ${e.name} が研修で特技【${TRAITS[e.trait!].icon}${TRAITS[e.trait!].name}】に目覚めた！`, 'gold');
     }
     const tough = e.trait === 'tough';
-    const rest = !tough && chance(g, Math.max(0, TRAINING.restChance - TILE_FX.restDown * rooms(c, 'rest')));
+    const rest = !tough && chance(g, Math.max(0, TRAINING.restChance - (nextTo(g, c, e.id, 'rest') ? OFFICE_FX.restAdjDown : 0)));
     if (rest) e.restQ = g.q + 1;
     L(c, `📚 ${e.name} が研修で${SKILL_NAME[k]}${lv ? ` ${lv}→${lv + 1}` : 'を新しく習得'}！（給料+${TRAINING.raise}・${rest ? '疲れて来期は休み…' : tough ? '💪体力おばけで来期も出勤' : '来期も元気に出勤'}${TRAINING.fee ? `・研修費 −${TRAINING.fee}` : ''}）`, rest ? 'muted' : 'good');
     if (e.trait === 'study') {
@@ -843,26 +841,14 @@ export function resolveDev(g: Game) {
       headlines.push(`${c.name}、「${p.name}」から撤退`);
       log(g, `${c.name}：「${p.name}」を放棄`);
     }
-    // 6.6 オフィスの改装・増築
-    if (s.office && c.office) {
-      let cost = 0;
-      const done: string[] = [];
-      for (const [i, k] of Object.entries(s.office.remodel || {})) {
-        const n = Number(i);
-        if (c.office.tiles[n] === undefined || c.office.tiles[n] === k) continue;
-        done.push(`${TILES[c.office.tiles[n]].name}→${TILES[k].name}`);
-        c.office.tiles[n] = k;
-        cost += OFFICE.remodel;
-      }
-      for (const k of s.office.add || []) {
-        cost += expandCost(c);
-        c.office.tiles.push(k);
-        done.push(`${TILES[k].icon}${TILES[k].name}を増築`);
-      }
-      if (cost) {
-        c.cash -= cost;
-        c.office.spent += cost;
-        L(c, `🏢 オフィス工事：${done.join('・')}（−${cost}）`, 'gold');
+    // 6.6 オフィス：増床・撤去・移動・設置・席替え
+    if (s.office && c.office?.items) {
+      const r = applyPlan(c.office, s.office);
+      c.office = r.office;
+      if (r.cost) {
+        c.cash -= r.cost;
+        c.office.spent += r.asset;
+        L(c, `🏢 オフィス工事：${r.notes.join('・')}（−${r.cost}）`, 'gold');
       }
     }
     // 7. サービス立ち上げ
@@ -911,8 +897,7 @@ export function resolveDev(g: Game) {
           p.progress = Math.min(p.work, p.progress + steps);
           L(c, `「${p.name}」進捗 ${p.progress}/${p.work}${p.rush ? (rd ? `（突貫・負債+${rd}）` : '（突貫・🌙夜型で負債なし）') : fast ? '（⚡爆速で2進んだ！）' : ''}`);
           const mentor = crew.some(e => e.trait === 'mentor');
-          const refresh = TILE_FX.refreshChance * rooms(c, 'refresh');
-          crew.forEach(e => gainXp(c, e, p.reqs, ledgers, (mentor && e.trait !== 'mentor' ? 2 : 1) + (refresh && chance(g, refresh) ? 1 : 0)));
+          crew.forEach(e => gainXp(c, e, p.reqs, ledgers, (mentor && e.trait !== 'mentor' ? 2 : 1) + (nextTo(g, c, e.id, 'refresh') && chance(g, OFFICE_FX.refreshAdj) ? 1 : 0)));
         } else if (team.length) {
           L(c, `「${p.name}」スキル不足で進まず`, 'bad');
         } else {

@@ -7,8 +7,22 @@ export type CardKey = 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7' | 'A8' | 'A
 export type HappeningKey = 'H1' | 'H2' | 'H3' | 'H4' | 'H5' | 'H6' | 'H7' | 'H8' | 'H9' | 'H10' | 'H11' | 'H12' | 'H13' | 'H14' | 'H15' | 'H16' | 'H17' | 'H18';
 export type IndustryKey = 'sier' | 'web' | 'saas' | 'ai' | 'maint' | 'consul';
 export type TraitKey = 'multi' | 'fast' | 'fire' | 'night' | 'refactor' | 'leader' | 'mentor' | 'mood' | 'sales' | 'cheap' | 'investor' | 'genius' | 'hopper' | 'tough' | 'study' | 'gambler';
-export type TileKind = 'work' | 'rest' | 'lab' | 'server' | 'meet' | 'refresh' | 'sec';
-export interface Office { tiles: TileKind[]; spent: number }
+export type ItemKind = 'desk' | 'rest' | 'meet' | 'bigmeet' | 'lab' | 'server' | 'refresh' | 'sec';
+/** オフィスに置いたもの（x,y は左上のマス、rot は 90度回転の回数） */
+export interface Placed { id: string; kind: ItemKind; x: number; y: number; rot: number }
+export interface Office {
+  w: number; h: number; items: Placed[];
+  seats: Record<string, string>;   // デスクのID → 座っている社員のID
+  spent: number; nextId: number; expansions: number;
+  tiles?: unknown;                 // 古い形式（1マス1部屋）の名残。読み込み時に作り直す
+}
+export interface OfficePlan {
+  expand?: 'row' | 'col';                                   // 床を1行／1列広げる
+  remove: string[];                                         // 撤去（改装費）
+  move: { id: string; x: number; y: number; rot: number }[]; // 移動・回転（改装費）
+  place: { kind: ItemKind; x: number; y: number; rot: number }[];   // 新しく置く（購入）
+  seats?: Record<string, string>;                           // 席替え（無料）
+}
 export type FundKind = 'bond' | 'index' | 'growth' | 'estate' | 'crypto' | 'angel';
 export interface Fund { id: string; kind: FundKind; name: string; mult?: number }   // mult は冬に決まる
 export interface Holding { fund: string; amount: number }
@@ -86,7 +100,7 @@ export interface DevSubmit {
   assign: Record<string, string | 'svc' | '' | 'fire' | 'train'>;
   train?: Record<string, Skill>;   // 研修に行かせる社員 → 伸ばすスキル
   invest?: Record<string, number>; // 投資先 → 金額
-  office?: { add: TileKind[]; remodel: Record<string, TileKind> };   // オフィスの増築・改装
+  office?: OfficePlan;             // オフィスの増床・配置・席替え
   rush: string[];
   drop?: string[];   // 放棄する案件
   launch: boolean;
