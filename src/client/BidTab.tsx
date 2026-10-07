@@ -1,6 +1,6 @@
 // ===== 入札タブ =====
 import { useState } from 'react';
-import { ABANDON, BID_PCTS, CARDS, INDUSTRIES, DESIGN_BONUS, INTERIM, DUMP_RATE, ENGINEER, FIRE_DEBT, HIRE_FEES, LATE_PENALTY, PROJECT_TYPES, REPEAT_BONUS, REP_DISCOUNT, SECRET_MULTS, SKILLS, SKILL_NAME, STOCK_CHANCE, TAGS } from '../logic/config';
+import { ABANDON, AD, ADS, BID_PCTS, CARDS, INDUSTRIES, DESIGN_BONUS, INTERIM, DUMP_RATE, ENGINEER, FIRE_DEBT, HIRE_FEES, LATE_PENALTY, PROJECT_TYPES, REPEAT_BONUS, REP_DISCOUNT, SECRET_MULTS, SKILLS, SKILL_NAME, STOCK_CHANCE, TAGS } from '../logic/config';
 import { bidFactor, canBid, checkReqs, hireBonus, payFactor, quarterLabel, round10, skillSum, slots, sumSkills, totalQ, working } from '../logic/calc';
 import { bidAmount, pendingSpies } from '../logic/game';
 import type { BidPct, BidSubmit, CardKey, Company, Game, HireFee, Project, Skill, Skills } from '../logic/types';
@@ -80,6 +80,16 @@ export function BidTab({ v, me, draft, set, locked }: P) {
           </div>
         );
       })}
+
+      <div className="sec-title">📣 広告 <small>お金で評判を上げる（1期1回・+{AD.maxRep}まで・冬の決算で消える）</small></div>
+      <div className="card">
+        <div className="note" style={{ marginBottom: 8 }}>いまの評判 <b>{me.rep}</b>：入札の比較で{Math.abs(me.rep * REP_DISCOUNT * 100).toFixed(0)}%{me.rep >= 0 ? '有利' : '不利'}。評判1につき比較値−{REP_DISCOUNT * 100}%。広告の評判は今期の入札から効き、その年の冬の決算で消えます{me.adRep ? `（いま広告で+${me.adRep}）` : ''}</div>
+        {(me.adRep || 0) >= AD.maxRep && <div className="note up" style={{ marginBottom: 8 }}>今年の広告効果は上限（+{AD.maxRep}）です。冬の決算のあとにまた出せます</div>}
+        <div className="seg">
+          <button className={draft.ad === undefined ? 'on' : 'off'} disabled={locked} onClick={() => set(d => ({ ...d, ad: undefined }))}>出さない</button>
+          {ADS.map((a, i) => <button key={a.name} className={draft.ad === i ? 'on gold' : ''} disabled={locked || (me.adRep || 0) >= AD.maxRep || a.cost > Math.max(0, me.cash)} onClick={() => { sfx.coin(); set(d => ({ ...d, ad: i })); }}>{a.icon}{a.name} {a.cost}<br /><small>評判+{Math.min(a.rep, Math.max(0, AD.maxRep - (me.adRep || 0)))}</small></button>)}
+        </div>
+      </div>
 
       <div className="sec-title">🃏 作戦カード <span className="n">{me.hand.length}</span><small>1枚だけ使えます・長押しで詳細</small></div>
       {me.hand.length === 0 && <div className="empty">手札がありません</div>}

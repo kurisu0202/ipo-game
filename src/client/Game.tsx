@@ -1,6 +1,6 @@
 // ===== ゲーム画面 =====
 import { useEffect, useMemo, useState } from 'react';
-import { CARDS, GAME, HAPPENINGS, PROJECT_TYPES, SEASONS, SERVICE } from '../logic/config';
+import { ADS, CARDS, GAME, HAPPENINGS, PROJECT_TYPES, SEASONS, SERVICE } from '../logic/config';
 import { payroll, projectCheck, quarterLabel, salaryMult, season, serviceIncome, slots, totalQ, totalYears, working, yen } from '../logic/calc';
 import { defaultDev, emptyBid } from '../logic/game';
 import type { ActiveProject, BidSubmit, Company, DevSubmit, Engineer, Game as G } from '../logic/types';
@@ -143,6 +143,7 @@ function bidSummary(g: G, d: BidSubmit) {
     parts.push({ t: `${CARDS[d.card].name}${t ? `→${t}` : ''}`, w: CARDS[d.card].kind === 'attack' && !d.target });
   }
   if (d.rent) parts.push({ t: 'レンタル申込' });
+  if (d.ad !== undefined && ADS[d.ad]) parts.push({ t: `${ADS[d.ad].name} ${ADS[d.ad].cost}` });
   return parts;
 }
 

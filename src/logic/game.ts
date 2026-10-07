@@ -3,7 +3,7 @@
 //  すべての乱数は g.seed から作るので、同じ入力なら同じ結果になる
 // =====================================================================
 import {
-  ABANDON, ACCUSE, FUNDS, GROWTH, INDUSTRIES, INVEST, OFFICE, TILES, TILE_FX, TRAINING, TRAIT, TRAITS, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
+  ABANDON, ACCUSE, AD, ADS, FUNDS, GROWTH, INDUSTRIES, INVEST, OFFICE, TILES, TILE_FX, TRAINING, TRAIT, TRAITS, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
   EMPLOYEE_EVENT, ENGINEER, FIRE_DEBT, FIRST_NAMES, GAME, HACKATHON, HAPPENINGS, HAPPENING_FX, HIRE_FEES, INCIDENT,
   INTERIM, INTEREST, INVESTIGATE_COST, LAST_NAMES, LATE_PENALTY, MUST_SHARE, PROJECT_TYPES, REMOTE_SALARY, RENTAL, REPEAT_BONUS,
   REP_DISCOUNT, SECRET_MULTS, SERVICE, SEVERANCE_QUARTERS, SKILLS, SKILL_NAME, SPY_STEAL,
@@ -331,6 +331,7 @@ function cleanBid(g: Game, cid: string, s: BidSubmit): BidSubmit {
   }
   if (s.rent && g.offers.some(o => o.id === s.rent && o.from !== cid)) out.rent = s.rent;
   out.spyOrders = cleanOrders(g, cid, s.spyOrders);
+  if (s.ad !== undefined && ADS[s.ad] && ADS[s.ad].cost <= Math.max(0, c.cash) && (c.adRep || 0) < AD.maxRep) out.ad = s.ad;
   return out;
 }
 
@@ -520,6 +521,21 @@ export function resolveBid(g: Game) {
   // 1. スパイ指令
   g.companies.forEach(c => applyOrders(g, c.id, subs[c.id].spyOrders));
 
+  // 1.5 広告（評判は広告で maxRep まで）
+  const adLines: RevealLine[] = [];
+  g.companies.forEach(c => {
+    const a = subs[c.id].ad;
+    if (a === undefined || !ADS[a]) return;
+    const ad = ADS[a];
+    const up = Math.max(0, Math.min(ad.rep, AD.maxRep - (c.adRep || 0)));
+    c.cash -= ad.cost;
+    c.rep += up;
+    c.adRep = (c.adRep || 0) + up;
+    adLines.push({ text: `${c.name}：${ad.icon}${ad.name}（−${ad.cost}）→ 評判+${up}（${c.rep}・冬まで）`, tone: 'good' });
+    log(g, `${c.name}：${ad.name}で評判+${up}`);
+  });
+  if (adLines.length) blocks.push({ kind: 'info', icon: '📣', title: '広告合戦', lines: adLines, stamp: { type: 'info', text: '評判アップ', tone: 'gold' } });
+
   // 2. 作戦カード
   for (const atk of g.companies) {
     const s = subs[atk.id];
@@ -642,6 +658,8 @@ export function resolveBid(g: Game) {
     const maxRep = Math.max(...tied.map(x => x.c.rep));
     tied = tied.filter(x => x.c.rep === maxRep);
     const win = pick(g, tied);
+    if (tied.length > 1) head.text += `（${tied.map(x => x.c.name).join('・')}が同額・同評判のため抽選）`;
+    else if (valid.filter(x => x.cmp === minCmp).length > 1) head.text += '（同額のため評判で決定）';
     const sorted = [...valid].sort((a, b) => a.cmp - b.cmp);
     const close = sorted.length > 1 && (sorted[1].cmp - sorted[0].cmp) / sorted[0].cmp <= CLOSE_RACE;
     const ap: ActiveProject = { ...p, price: win.amount, progress: 0, work: p.duration, start: q, deadline: q + p.duration - 1, rush: false, fx: 1 };
@@ -670,8 +688,11 @@ export function resolveBid(g: Game) {
     const maxFee = Math.max(...valid.map(x => x.cmp));
     let tied = valid.filter(x => x.cmp === maxFee);
     const maxRep = Math.max(...tied.map(x => x.c.rep));
+    const sameFee = tied.length > 1;
     tied = tied.filter(x => x.c.rep === maxRep);
     const win = pick(g, tied);
+    if (tied.length > 1) head.text += `（${tied.map(x => x.c.name).join('・')}が同額・同評判のため抽選）`;
+    else if (sameFee) head.text += '（同額のため評判で決定）';
     win.c.cash -= win.fee;
     win.c.engineers.push({ ...e, assign: null });
     win.c.stats.hires++;
@@ -1058,6 +1079,11 @@ export function resolveDev(g: Game) {
       }
     });
     if (lines.length) blocks.push({ kind: 'season', icon: '🏃', title: '転職癖の社員が退職', lines, stamp: { type: 'loss', text: '退職', tone: 'bad' } });
+  }
+  if (season(q) === 3 && g.companies.some(c => c.adRep)) {
+    const lines: RevealLine[] = [];
+    g.companies.forEach(c => { if (!c.adRep) return; c.rep -= c.adRep; lines.push({ text: `${c.name}：広告の効果が切れて評判−${c.adRep}（${c.rep}）`, tone: 'muted' }); c.adRep = 0; });
+    blocks.push({ kind: 'season', icon: '📣', title: '広告ブームの終わり', lines, stamp: { type: 'info', text: '評判リセット', tone: 'muted' } });
   }
   if (season(q) === 3 && (g.funds || []).length) {
     const lines: RevealLine[] = [];

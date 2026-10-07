@@ -84,6 +84,7 @@ export function smartBid(g: Game, cid: string, r: R): BidSubmit {
     if (CARDS[attack].kind === 'attack') s.target = [...g.companies].filter(x => x.id !== cid).sort((a, b) => b.cash - a.cash)[0].id;
   }
   pendingSpies(g, cid).forEach(x => { s.spyOrders[x.engineer.id] = 'steal'; });
+  if (c.cash > 2500 && c.rep < 4 && r() < 0.3) s.ad = 0;
   return s;
 }
 

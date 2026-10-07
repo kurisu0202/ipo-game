@@ -55,6 +55,7 @@ export interface Company {
   industry?: IndustryKey;          // 選んだ業種
   invest?: Holding[];              // 今年の投資（冬の決算で結果が出る。本人だけに見える）
   office?: Office;                 // 自社オフィス（作業マスの数＝社員の上限）
+  adRep?: number;                  // 広告で上乗せしている評判（冬の決算で消える）
   choices?: IndustryKey[];         // 配られた業種の候補（本人だけに見える）
   secretNotes: string[];
   quarterStartCash: number;
@@ -76,6 +77,7 @@ export interface BidSubmit {
   card?: CardKey; target?: string;
   rent?: string;
   spyOrders: Record<string, SpyOrder>;
+  ad?: number;   // 広告（ADS の番号。1期1回）
 }
 
 export interface PickSubmit { industry: IndustryKey }

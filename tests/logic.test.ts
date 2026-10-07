@@ -560,3 +560,31 @@ describe('オフィス', () => {
     expect(g2.final!.find(r => r.id === 'a')!.office).toBe(500);
   });
 });
+
+describe('広告・同点', () => {
+  it('広告で評判が上がり、今期の入札から効く。上乗せは+2まで・冬の決算で消える', () => {
+    const g = two(); cleanHands(g);
+    g.market = [proj('p1', 1000)];
+    co(g, 'a').cash = 1000; co(g, 'b').rep = 1;
+    bidOnly(g, { a: { bids: { p1: 100 }, ad: 1 }, b: { bids: { p1: 100 } } });   // テレビCMで評判+2 → 比較 940 < 970
+    expect(co(g, 'a').rep).toBe(2);
+    expect(co(g, 'a').cash).toBe(100);
+    expect(co(g, 'a').projects[0]?.id).toBe('p1');
+    const g2 = two(); cleanHands(g2); g2.market = [];
+    co(g2, 'a').cash = 2000; co(g2, 'a').adRep = 2; co(g2, 'a').rep = 4;
+    bidOnly(g2, { a: { ad: 0 } });
+    expect(co(g2, 'a').cash).toBe(2000);   // 今年はもう上乗せできない
+    const g3 = two(); cleanHands(g3);
+    g3.q = 3; g3.phase = 'dev';
+    co(g3, 'a').rep = 3; co(g3, 'a').adRep = 2;
+    devOnly(g3);
+    expect(co(g3, 'a').rep).toBe(1 + (g3.reveal!.blocks.some(b => b.title.includes('冬の決算') && b.lines.some(l => l.text.includes('年間表彰') && l.text.includes('A社'))) ? 1 : 0));
+    expect(co(g3, 'a').adRep).toBe(0);
+  });
+  it('同額・同評判なら抽選と表示する', () => {
+    const g = two(); cleanHands(g);
+    g.market = [proj('p1', 1000)];
+    bidOnly(g, { a: { bids: { p1: 90 } }, b: { bids: { p1: 90 } } });
+    expect(g.reveal!.blocks.some(b => b.lines.some(l => l.text.includes('同額・同評判のため抽選')))).toBe(true);
+  });
+});

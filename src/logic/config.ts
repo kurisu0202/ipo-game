@@ -285,3 +285,10 @@ export const TILES: Record<TileKind, TileSpec> = {
   sec: { name: 'セキュリティ室', icon: '🔒', short: 'セキュ', desc: '妨害「情報漏洩」「技術ブログ炎上」を毎回防ぐ（カードを使わない）' },
 };
 export const TILE_FX = { restDown: 0.1, fluBlock: 0.5, labUp: 0.1, serverDown: 1, meetDown: 0.03, refreshChance: 0.2, secBlocks: ['A5', 'A7'] as CardKey[] };
+
+// ---------- 広告（入札フェーズで1期1回。お金で評判を上げる。広告の評判は maxRep まで上乗せでき、その年の冬の決算で消える） ----------
+export const ADS = [
+  { name: 'Web広告', icon: '📣', cost: 500, rep: 1 },
+  { name: 'テレビCM', icon: '📺', cost: 900, rep: 2 },
+] as const;
+export const AD = { maxRep: 2 };
