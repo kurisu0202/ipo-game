@@ -15,16 +15,26 @@ export function LogoMark({ g, id, name }: { g: Game; id: string; name: string })
   return <span className="logo-mark" style={{ background: companyColor(g, id) }}>{[...name][0]}</span>;
 }
 
-export function SkillChips({ skills, need, highlight }: { skills: Skills; need?: Skills; highlight?: Partial<Record<Skill, 'ok' | 'short'>> }) {
+/** スキルの表示。base（本来の値）を渡すと、今期だけ下がっているスキルを「1→0」と赤で出す（0 になっても消さない） */
+export function SkillChips({ skills, need, highlight, base, why }: { skills: Skills; need?: Skills; highlight?: Partial<Record<Skill, 'ok' | 'short'>>; base?: Skills; why?: string }) {
   return (
     <span className="chips">
-      {SKILLS.filter(k => skills[k]).map(k => (
-        <span key={k} className={`skill ${highlight?.[k] || ''}`} title={SKILL_NAME[k]}>
-          {SKILL_ICON[k]} {SKILL_NAME[k]} <b>{skills[k]}</b>{need?.[k] !== undefined ? <span className="faint">/{need[k]}</span> : null}
-        </span>
-      ))}
+      {SKILLS.filter(k => skills[k] || base?.[k]).map(k => {
+        const down = base && (skills[k] || 0) < (base[k] || 0);
+        return (
+          <span key={k} className={`skill ${highlight?.[k] || ''} ${down ? 'reduced' : ''}`} title={down ? `${SKILL_NAME[k]}：本来${base![k]}、今期は${skills[k] || 0}${why ? `（${why}）` : ''}` : SKILL_NAME[k]}>
+            {SKILL_ICON[k]} {SKILL_NAME[k]} {down ? <><s>{base![k]}</s>→<b>{skills[k] || 0}</b></> : <b>{skills[k]}</b>}{need?.[k] !== undefined ? <span className="faint">/{need[k]}</span> : null}
+          </span>
+        );
+      })}
     </span>
   );
+}
+
+/** タップと長押しを分けて受け取るボタン（一覧の中でも使えるように部品にしたもの） */
+export function PressButton({ onTap, onLong, children, ...rest }: { onTap?: () => void; onLong: () => void; children: ReactNode } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onClick'>) {
+  const lp = useLongPress(onLong, onTap);
+  return <button {...rest} {...lp}>{children}</button>;
 }
 
 export function Money({ v, signed, className = '' }: { v: number; signed?: boolean; className?: string }) {

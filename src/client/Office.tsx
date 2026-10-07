@@ -1,10 +1,10 @@
 // ===== 自社オフィス：床のマス目に、形のある家具・部屋を置く見取り図 =====
 import { useState } from 'react';
-import { ITEMS, OFFICE } from '../logic/config';
-import { officeValue, seats, seatsUsed } from '../logic/calc';
+import { ITEMS, OFFICE, OFFICE_FX } from '../logic/config';
+import { officeValue, rooms, seats, seatsUsed } from '../logic/calc';
 import { applyPlan, canPlace, cellsOf, checkPlan, emptyPlan, expandCost, nextTo, planIsEmpty, seatMap, shape } from '../logic/office';
 import type { Company, Game, ItemKind, OfficePlan, Placed } from '../logic/types';
-import { Face, Sheet } from './ui';
+import { Face, PressButton, Sheet } from './ui';
 
 const KINDS = Object.keys(ITEMS) as ItemKind[];
 const lastName = (n: string) => n.split(/\s|　/)[0] || n;
@@ -30,6 +30,7 @@ type Mode = null | { type: 'place'; kind: ItemKind; rot: number } | { type: 'mov
 export function OfficeView({ g, me, plan, editable, onPlan }: { g: Game; me: Company; plan?: OfficePlan; editable?: boolean; onPlan?: (p: OfficePlan) => void }) {
   const [mode, setMode] = useState<Mode>(null);
   const [pick, setPick] = useState<Placed | null>(null);
+  const [info, setInfo] = useState<{ kind: ItemKind; id?: string } | null>(null);
   if (!me.office?.items) return null;
   const base = me.office;
   const p: OfficePlan = plan || emptyPlan();
@@ -99,14 +100,15 @@ export function OfficeView({ g, me, plan, editable, onPlan }: { g: Game; me: Com
     const person = it.kind === 'desk' ? seatsNow[it.id] : undefined;
     const planned = isNew(it.id) || isMoved(it.id);
     cells.push(
-      <button key={key} className={`icell t-${it.kind} ${planned ? 'plan' : ''} ${ok ? 'fit' : ''}`} style={cellStyle(it, x, y)} disabled={!editable || (!!mode && !ok)} onClick={() => tapCell(x, y)}>
+      <PressButton key={key} className={`icell lp t-${it.kind} ${planned ? 'plan' : ''} ${ok ? 'fit' : ''}`} style={cellStyle(it, x, y)} disabled={!!mode && !ok}
+        onTap={() => (editable ? tapCell(x, y) : setInfo({ kind: it.kind, id: it.id }))} onLong={() => { if (!mode) setInfo({ kind: it.kind, id: it.id }); }}>
         {it.kind === 'desk'
           ? (person
             ? <span className={`who ${person.away ? 'away' : ''}`}><Face name={person.e.name} size={28} /><small>{lastName(person.e.name)}</small>{person.away && <em>貸出中</em>}</span>
             : <span className="vacant"><span className="ic">🪑</span><small>空席</small></span>)
           : anchor && !rect ? <span className="room"><span className="ic">{ITEMS[it.kind].icon}</span><small>{ITEMS[it.kind].short}</small></span> : null}
         {anchor && planned && <span className="ribbon">{isNew(it.id) ? '新設' : '移動'}</span>}
-      </button>,
+      </PressButton>,
     );
   }
 
@@ -143,11 +145,11 @@ export function OfficeView({ g, me, plan, editable, onPlan }: { g: Game; me: Com
         <>
           <div className="palette">
             {KINDS.map(k => (
-              <button key={k} className="pal" onClick={() => setMode({ type: 'place', kind: k, rot: 0 })} title={ITEMS[k].desc}>
+              <PressButton key={k} className="pal lp" onTap={() => setMode({ type: 'place', kind: k, rot: 0 })} onLong={() => setInfo({ kind: k })} title={ITEMS[k].desc}>
                 <ShapeMini kind={k} />
                 <span className="pn">{ITEMS[k].icon}{ITEMS[k].name}</span>
                 <span className="pc">{ITEMS[k].cost}{ITEMS[k].adj ? '・となり' : ''}</span>
-              </button>
+              </PressButton>
             ))}
           </div>
           <div className="row" style={{ gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
@@ -162,10 +164,45 @@ export function OfficeView({ g, me, plan, editable, onPlan }: { g: Game; me: Com
         <div className="note" style={{ marginTop: 8 }}>
           {preview.cost ? <>工事費 合計 <b className={chk.ok ? '' : 'down'}>{preview.cost.toLocaleString()}万円</b>（決定すると支払い）・</> : null}
           {!chk.ok && chk.reason ? <b className="down">⚠ {chk.reason}・</b> : null}
-          パレットから選んで置く／置いたものをタップで移動・回転・撤去（{OFFICE.move}）・デスクをタップで席替え（無料）。<b>となり</b>の付いた部屋は、上下左右にとなり合うデスクの社員だけに効きます。オフィスにかけたお金の{OFFICE.finalValue * 100}%は最終決算で資産に
+          パレットから選んで置く／置いたものをタップで移動・回転・撤去（{OFFICE.move}）・デスクをタップで席替え（無料）・<b>長押しで効果</b>。<b>となり</b>の付いた部屋は、上下左右にとなり合うデスクの社員だけに効きます。オフィスにかけたお金の{OFFICE.finalValue * 100}%は最終決算で資産に
         </div>
       )}
-      {!editable && <div className="note" style={{ marginTop: 8 }}>増床・配置・席替えは開発フェーズの「開発」タブでできます</div>}
+      {!editable && <div className="note" style={{ marginTop: 8 }}>部屋をタップ（長押し）で効果を確認。増床・配置・席替えは開発フェーズの「開発」タブでできます</div>}
+
+      {info && (() => {
+        const s = ITEMS[info.kind];
+        const it = info.id ? o.items.find(i => i.id === info.id) : undefined;
+        const office = { ...me, office: o };
+        const people = Object.values(seatsNow);
+        // となりの部屋：この部屋に接するデスクの社員
+        const helped = s.adj && it ? people.filter(q => nextTo(g, office, q.e.id, info.kind)) : [];
+        const count = o.items.filter(i => i.kind === info.kind).length;
+        const scope = info.kind === 'desk' ? '' : s.adj ? 'となりのデスクに座る社員に効く' : `会社全体に効く（同じ種類は${OFFICE.maxEffect}つまで。いま${count}つ${count > OFFICE.maxEffect ? `・効くのは${OFFICE.maxEffect}つ` : ''}）`;
+        const person = it?.kind === 'desk' ? seatsNow[it.id] : undefined;
+        const near = person ? KINDS.filter(k => ITEMS[k].adj && nextTo(g, office, person.e.id, k)) : [];
+        return (
+          <Sheet onClose={() => setInfo(null)} title={<>{s.icon} {s.name}</>} sub={scope}>
+            <div className="card">
+              <div className="row" style={{ gap: 12 }}><ShapeMini kind={info.kind} rot={it?.rot || 0} /><div className="grow"><b>効果</b><p style={{ margin: '4px 0 0' }}>{s.desc}</p></div></div>
+              <div className="note" style={{ marginTop: 8 }}>大きさ {s.cells.length}マス・設置 {s.cost}万円・移動／回転／撤去 {OFFICE.move}万円（最終決算で設置費の{OFFICE.finalValue * 100}%が資産に）</div>
+            </div>
+            {s.adj && it && (
+              <div className="card"><b>いま効いている社員</b>
+                <div className="note" style={{ marginTop: 6 }}>{helped.length ? helped.map(q => q.e.name).join('・') : 'となりのデスクに誰も座っていません。デスクをとなりに置くか、席替えしましょう'}</div></div>
+            )}
+            {!s.adj && it && info.kind !== 'desk' && (
+              <div className="card"><b>会社全体の効果</b><div className="note" style={{ marginTop: 6 }}>
+                {info.kind === 'meet' || info.kind === 'bigmeet' ? `入札の比較値 −${Math.round(Math.min(OFFICE_FX.meetCap, OFFICE_FX.meetDown * rooms(office, 'meet') + OFFICE_FX.bigMeetDown * rooms(office, 'bigmeet')) * 100)}%（最大${OFFICE_FX.meetCap * 100}%）`
+                  : info.kind === 'server' ? `サービスのLvアップに必要なスキル −${rooms(office, 'server') * OFFICE_FX.serverDown}`
+                    : '情報漏洩・技術ブログ炎上を毎回ブロック'}
+              </div></div>
+            )}
+            {it?.kind === 'desk' && (
+              <div className="card"><b>この席</b><div className="note" style={{ marginTop: 6 }}>{person ? person.e.name : '空席'}{near.length ? `：${near.map(k => `${ITEMS[k].icon}${ITEMS[k].name}`).join('・')}のとなり` : person ? '：となりに効果のある部屋はありません' : ''}</div></div>
+            )}
+          </Sheet>
+        );
+      })()}
 
       {pick && (() => {
         const it = o.items.find(i => i.id === pick.id);

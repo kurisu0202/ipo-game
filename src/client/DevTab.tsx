@@ -50,7 +50,7 @@ export function DevTab({ v, me, draft, set, locked }: P) {
       <Coach phase="dev" q={g.q} />
       <SecretFile v={v} me={me} orders={draft.spyOrders} locked={locked} open={pend.length > 0}
         setOrder={(eid, o) => set(d => ({ ...d, spyOrders: { ...d.spyOrders, [eid]: o } }))} />
-      {me.effects.slack === g.q && <div className="warn" style={{ marginTop: 10 }}>💬 深夜のSlack爆撃で、今期は全社員のスキル−1</div>}
+      {me.effects.slack === g.q && <div className="warn" style={{ marginTop: 10 }}>💬 深夜のSlack爆撃で、今期は全社員のスキル−1（レベル1のスキルは0になります。来期には元に戻ります）</div>}
 
       <div className="sec-title">🛠️ 進行中の案件 <span className="n">{me.projects.length}</span></div>
       {me.projects.length === 0 && <div className="empty">進行中の案件はありません。待機中の社員は負債を返す（リファクタリング）か、サービスに回しましょう</div>}
@@ -358,7 +358,7 @@ function ProjectDevCard({ g, me, p, assign, rush, locked, onOpen, onFill, onRemo
           <span className="nm">{e.name}</span>
           {!working(g, e) && <span className="tagx">休み</span>}
           <span className="grow" />
-          <SkillChips skills={Object.fromEntries(SKILLS.filter(k => p.reqs[k] && e.skills[k]).map(k => [k, effSkills(g, me, e)[k] || 0]))} />
+          <SkillChips skills={Object.fromEntries(SKILLS.filter(k => p.reqs[k] && e.skills[k]).map(k => [k, effSkills(g, me, e)[k] || 0]))} base={Object.fromEntries(SKILLS.filter(k => p.reqs[k] && e.skills[k]).map(k => [k, e.skills[k] || 0]))} why="Slack爆撃" />
           {!locked && <button className="btn xs" onClick={() => onRemove(e.id)}>外す</button>}
         </div>
       ))}
@@ -520,6 +520,7 @@ function AssignSheet({ g, me, target, assign, locked, onToggle, onClose }: {
     : `Lvアップには担当スキル合計 ${svcNeed}（今 ${svcPower}）`;
   return (
     <Sheet onClose={onClose} title={title} sub={sub}>
+      {me.effects.slack === g.q && <div className="warn" style={{ marginBottom: 8 }}>💬 深夜のSlack爆撃を受けたため、今期は全員のスキルが−1です（研修で覚えたばかりのレベル1のスキルは0になります）。来期には元に戻ります</div>}
       {proj && <Gauges reqs={proj.reqs} sums={now!.sums} />}
       {rows.map(({ e, on, label, gain, warn, cur }) => {
         const usable = working(g, e);
@@ -530,7 +531,7 @@ function AssignSheet({ g, me, target, assign, locked, onToggle, onClose }: {
               <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}><b>{e.name}</b>
                 {on ? <span className="lbl full">担当中</span> : label === 'full' ? <span className="lbl full">これで足りる！</span> : label === 'part' ? <span className="lbl part">不足を{gain}埋める</span> : <span className="lbl none">効果なし</span>}
               </div>
-              <div style={{ marginTop: 4 }}><SkillChips skills={effSkills(g, me, e)} highlight={proj ? Object.fromEntries(SKILLS.filter(k => proj.reqs[k] && e.skills[k]).map(k => [k, 'ok'])) : undefined} /></div>
+              <div style={{ marginTop: 4 }}><SkillChips skills={effSkills(g, me, e)} base={e.skills} why="Slack爆撃" highlight={proj ? Object.fromEntries(SKILLS.filter(k => proj.reqs[k] && e.skills[k]).map(k => [k, 'ok'])) : undefined} /></div>
               <div className="note">{usable ? `いま：${placeName(me, cur)}` : '今期はお休み'}{e.trait === 'multi' && usable ? '（🔀掛け持ちで2つまで担当できます）' : ''}</div>
               {e.trait && <TraitLine e={e} />}
               {warn && <div className="note down">⚠ {warn}</div>}

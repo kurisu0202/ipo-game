@@ -596,3 +596,6 @@ details.fold.secret > summary { color: var(--down); }
 .shape-mini i { border-radius: 2px; border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); }
 @media (prefers-reduced-motion: reduce) { .fcell.fit, .icell.fit { animation: none; } }
 .icell:not(.t-desk) { box-shadow: none; }
+.skill.reduced { background: var(--down-bg); color: var(--down); border-color: transparent; }
+.skill.reduced s { opacity: .6; margin-right: 1px; }
+.icell.lp, .pal.lp { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
