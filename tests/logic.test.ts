@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createGame, defaultDev, emptyBid, grantTrait, resolveBid, resolveDev, submit, tryResolve } from '../src/logic/game';
 import { viewFor } from '../src/logic/view';
+import { TRAINING } from '../src/logic/config';
 import { projectCheck } from '../src/logic/calc';
 import type { ActiveProject, BidSubmit, Company, Engineer, Game, Project } from '../src/logic/types';
 
@@ -323,7 +324,8 @@ describe('研修', () => {
     a.projects = [];
     return g;
   };
-  it('持っているスキルは+1・持っていないスキルは習得。給料+5で来期は休み', () => {
+  it('持っているスキルは+1・持っていないスキルは習得。給料+5で来期は休み（休む確率100%のとき）', () => {
+    const keep = TRAINING.restChance; TRAINING.restChance = 1;
     const g = setup();
     devOnly(g, (c, s) => { if (c.id === 'a') { s.assign.e1 = 'train'; s.train = { e1: 'BE' }; } });
     const e1 = co(g, 'a').engineers.find(e => e.id === 'e1')!;
@@ -334,6 +336,24 @@ describe('研修', () => {
     const g2 = setup();
     devOnly(g2, (c, s) => { if (c.id === 'a') { s.assign.e1 = 'train'; s.train = { e1: 'AI' }; } });
     expect(co(g2, 'a').engineers.find(e => e.id === 'e1')!.skills).toEqual({ BE: 2, AI: 1 });
+    TRAINING.restChance = 0;
+    const g3 = setup();
+    devOnly(g3, (c, s) => { if (c.id === 'a') { s.assign.e1 = 'train'; s.train = { e1: 'BE' }; } });
+    expect(co(g3, 'a').engineers.find(e => e.id === 'e1')!.restQ).not.toBe(1);   // 休まない
+    TRAINING.restChance = keep;
+  });
+  it('研修のあと休むのはおよそ30%', () => {
+    let rest = 0;
+    for (let seed = 1; seed <= 400; seed++) {
+      const g = createGame([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], seed, 'x', 12, false);
+      cleanHands(g); g.phase = 'dev';
+      const a = co(g, 'a');
+      a.engineers = [eng('e1', { BE: 1 })]; a.projects = [];
+      devOnly(g, (c, s) => { if (c.id === 'a') { s.assign.e1 = 'train'; s.train = { e1: 'BE' }; } });
+      if (a.engineers[0].restQ === 1) rest++;
+    }
+    expect(rest / 400).toBeGreaterThan(0.2);
+    expect(rest / 400).toBeLessThan(0.4);
   });
   it('上限のスキル・借りている社員・今期休みの社員は研修に行けない', () => {
     const g = setup();
@@ -468,6 +488,7 @@ describe('特技（★1の追加分）', () => {
     return { g, a };
   };
   it('体力おばけは研修のあとも休まない・勉強熱心はもう1つのスキルにも経験値', () => {
+    const keep = TRAINING.restChance; TRAINING.restChance = 1;
     const { g, a } = setup();
     a.engineers = [eng('t', { BE: 2 }, { trait: 'tough' }), eng('s', { BE: 2, FE: 3 }, { trait: 'study', xp: { FE: 3 } })];
     devOnly(g, (c, s) => { if (c.id === 'a') { s.assign = { t: 'train', s: 'train' }; s.train = { t: 'BE', s: 'BE' }; } });
@@ -476,6 +497,7 @@ describe('特技（★1の追加分）', () => {
     expect(t.restQ).not.toBe(1);
     expect(st.restQ).toBe(1);
     expect(st.skills).toEqual({ BE: 3, FE: 4 });   // FE は経験値 3+1=4 で 3→4
+    TRAINING.restChance = keep;
   });
   it('ギャンブラーは投資の結果が1段階上下することがある', () => {
     let up = false, down = false;

@@ -705,8 +705,9 @@ function doTraining(g: Game, c: Company, s: DevSubmit, L: (c: Company, text: str
       L(c, `✨ ${e.name} が研修で特技【${TRAITS[e.trait!].icon}${TRAITS[e.trait!].name}】に目覚めた！`, 'gold');
     }
     const tough = e.trait === 'tough';
-    if (!tough) e.restQ = g.q + 1;
-    L(c, `📚 ${e.name} が研修で${SKILL_NAME[k]}${lv ? ` ${lv}→${lv + 1}` : 'を新しく習得'}！（給料+${TRAINING.raise}・${tough ? '💪体力おばけで来期も出勤' : '来期は休み'}${TRAINING.fee ? `・研修費 −${TRAINING.fee}` : ''}）`, 'good');
+    const rest = !tough && chance(g, TRAINING.restChance);
+    if (rest) e.restQ = g.q + 1;
+    L(c, `📚 ${e.name} が研修で${SKILL_NAME[k]}${lv ? ` ${lv}→${lv + 1}` : 'を新しく習得'}！（給料+${TRAINING.raise}・${rest ? '疲れて来期は休み…' : tough ? '💪体力おばけで来期も出勤' : '来期も元気に出勤'}${TRAINING.fee ? `・研修費 −${TRAINING.fee}` : ''}）`, rest ? 'muted' : 'good');
     if (e.trait === 'study') {
       const other = SKILLS.filter(x => x !== k && (e.skills[x] || 0) > 0 && (e.skills[x] || 0) < GROWTH.maxSkill).sort((a, b) => (e.skills[b] || 0) - (e.skills[a] || 0))[0];
       if (other) {

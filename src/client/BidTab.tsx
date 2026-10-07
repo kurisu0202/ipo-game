@@ -1,9 +1,9 @@
 // ===== 入札タブ =====
 import { useState } from 'react';
 import { ABANDON, BID_PCTS, CARDS, INDUSTRIES, DESIGN_BONUS, INTERIM, DUMP_RATE, ENGINEER, FIRE_DEBT, HIRE_FEES, LATE_PENALTY, PROJECT_TYPES, REPEAT_BONUS, REP_DISCOUNT, SECRET_MULTS, SKILLS, SKILL_NAME, STOCK_CHANCE, TAGS } from '../logic/config';
-import { bidFactor, canBid, checkReqs, hireBonus, payFactor, quarterLabel, round10, skillSum, sumSkills, totalQ } from '../logic/calc';
+import { bidFactor, canBid, checkReqs, hireBonus, payFactor, quarterLabel, round10, skillSum, slots, sumSkills, totalQ, working } from '../logic/calc';
 import { bidAmount, pendingSpies } from '../logic/game';
-import type { BidPct, BidSubmit, CardKey, Company, Game, HireFee, Project, Skills } from '../logic/types';
+import type { BidPct, BidSubmit, CardKey, Company, Game, HireFee, Project, Skill, Skills } from '../logic/types';
 import type { PlayerView } from '../logic/view';
 import { Coach, SecretFile } from './parts';
 import { TraitLine } from './DevTab';
@@ -110,23 +110,28 @@ export function BidTab({ v, me, draft, set, locked }: P) {
   );
 }
 
-function capacityWarn(g: Game, me: Company, reqs: Skills): string | null {
-  const all = sumSkills(g, me, me.engineers);
-  const full = checkReqs(reqs, all);
-  if (!full.ok) return `社員全員でも ${SKILLS.filter(k => full.missing[k]).map(k => `${SKILL_NAME[k]}が${full.missing[k]}`).join('・')} 足りません`;
-  const busy: Skills = {};
-  me.projects.forEach(p => SKILLS.forEach(k => { if (p.reqs[k]) busy[k] = (busy[k] || 0) + (p.reqs[k] || 0); }));
-  const free: Skills = {};
-  SKILLS.forEach(k => { free[k] = Math.max(0, (all[k] || 0) - (busy[k] || 0)); });
-  const part = checkReqs(reqs, free);
-  if (!part.ok) return `進行中の案件と並行すると ${SKILLS.filter(k => part.missing[k]).map(k => SKILL_NAME[k]).join('・')} が不足する恐れ`;
-  return null;
+/** 今期動ける社員（休みを除く）で、この案件のスキルが足りるか */
+function capacityInfo(g: Game, me: Company, reqs: Skills): { ok: boolean; text: string } {
+  const miss = (m: Partial<Record<Skill, number>>) => SKILLS.filter(k => m[k]).map(k => `${SKILL_NAME[k]}あと${m[k]}`).join('・');
+  const avail = me.engineers.filter(e => working(g, e));
+  const resting = me.engineers.filter(e => !working(g, e));
+  const free = avail.filter(e => !slots(e.assign).length);
+  const restNote = resting.length ? `・今期休みの${resting.length}人は除く` : '';
+  const byFree = checkReqs(reqs, sumSkills(g, me, free));
+  if (byFree.ok) return { ok: true, text: `空いている社員${free.length}人で足ります${restNote}` };
+  const byAvail = checkReqs(reqs, sumSkills(g, me, avail));
+  if (byAvail.ok) return { ok: false, text: `空いている社員${free.length}人では ${miss(byFree.missing)} 足りません。ほかの担当から回せば足ります${restNote}` };
+  // 休んでいる人が戻れば足りるか（休みは今期だけ）
+  const everyone: Skills = {};
+  for (const e of me.engineers) for (const k of SKILLS) if (e.skills[k]) everyone[k] = (everyone[k] || 0) + (e.skills[k] || 0);
+  const back = resting.length && checkReqs(reqs, everyone).ok;
+  return { ok: false, text: `今期動ける社員${avail.length}人全員でも ${miss(byAvail.missing)} 足りません${back ? `（休みの${resting.map(e => e.name).join('・')}が戻る来期からなら足ります）` : restNote}` };
 }
 
 function ProjectBidCard({ g, me, p, pct, dumping, locked, onPick }: { g: Game; me: Company; p: Project; pct?: BidPct; dumping: boolean; locked: boolean; onPick: (p?: BidPct) => void }) {
   const spec = PROJECT_TYPES[p.type];
   const secret = p.type === 'secret';
-  const warn = capacityWarn(g, me, p.reqs);
+  const cap = capacityInfo(g, me, p.reqs);
   const banned = me.effects.noBid === g.q;
   const blocked = !canBid(me, p.type);
   const bf = bidFactor(me, p.type);
@@ -151,7 +156,7 @@ function ProjectBidCard({ g, me, p, pct, dumping, locked, onPick }: { g: Game; m
         <button className="chip blue" style={{ marginLeft: 'auto' }} onClick={() => setInfo(true)}>💰 利益の目安</button>
       </div>
       <SkillChips skills={p.reqs} />
-      {warn && <div className="warn" style={{ marginTop: 8 }}>⚠ {warn}</div>}
+      {cap.ok ? <div className="okbar" style={{ marginTop: 8 }}>✓ {cap.text}</div> : <div className="warn" style={{ marginTop: 8 }}>⚠ {cap.text}</div>}
       <div className="bidline">
         <div className="result">
           {blocked ? <span className="down">業種（{me.industry ? INDUSTRIES[me.industry].name : ''}）の都合で入札できません</span>

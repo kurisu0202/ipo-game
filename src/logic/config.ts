@@ -69,8 +69,8 @@ export const LATE_PENALTY = 0.1;
 //        「今のレベル+1」たまるとスキル+1・給料+raise（最大 maxSkill）
 export const GROWTH = { maxSkill: 5, raise: 5 };
 export const xpNeed = (lv: number) => lv + 1;
-// 研修：開発フェーズで空いている社員を研修へ。選んだスキルが+1（持っていなければ1で習得）、給料+raise、来期は休み
-export const TRAINING = { fee: 0, raise: 5 };
+// 研修：開発フェーズで空いている社員を研修へ。選んだスキルが+1（持っていなければ1で習得）、給料+raise、restChance の確率で来期は休み
+export const TRAINING = { fee: 0, raise: 5, restChance: 0.3 };
 export const ABANDON = { penalty: 0.2, rep: -1 };   // 案件の途中放棄：違約金＝受注額×0.2、評判−1（受け取り済みの中間金は返さない）
 export const INTERIM = 0.5;   // 一括払いの案件：進んだ期ごとに受注額×0.5÷期間 を中間金として先に受け取る（残りは完了時）
 export const REPEAT_BONUS = 100;
@@ -255,7 +255,7 @@ export const TRAITS: Record<TraitKey, TraitSpec> = {
   investor: { name: '投資の勘', icon: '🔮', rarity: 2, group: 'お金', desc: '会社の投資で一番悪い結果が出たとき、1年に1回だけ1段階よい結果になる' },
   genius: { name: '天才肌', icon: '🌟', rarity: 3, group: 'クセあり', desc: 'スキルがすべて+1。ただし毎期20%で気分が乗らずに休む' },
   hopper: { name: '転職癖', icon: '🏃', rarity: 2, group: 'クセあり', desc: 'スキルがすべて+1。ただし毎年冬の決算で30%の確率で辞めてしまう' },
-  tough: { name: '体力おばけ', icon: '💪', rarity: 1, group: '働き方', desc: '研修のあとも休まない（研修した次の期もすぐ働ける）' },
+  tough: { name: '体力おばけ', icon: '💪', rarity: 1, group: '働き方', desc: '研修のあとに休むことがない（ふつうは30%で次の期が休み）' },
   study: { name: '勉強熱心', icon: '📖', rarity: 1, group: '成長', desc: '研修のとき、ほかに持っているスキル1つにも経験値+1' },
   gambler: { name: 'ギャンブラー', icon: '🎲', rarity: 1, group: 'クセあり', desc: '会社の投資の結果が、投資先ごとに10%で1段階よくなり、10%で1段階悪くなる' },
 };

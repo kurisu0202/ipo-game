@@ -168,7 +168,7 @@ function InvestCard({ g, me, draft, locked, onSet }: { g: Game; me: Company; dra
   );
 }
 
-/** 研修：空いている社員を研修に行かせる（スキル+1・新スキル習得。来期は休み） */
+/** 研修：空いている社員を研修に行かせる（スキル+1・新スキル習得。30%で来期は休み） */
 function TrainCard({ g, me, draft, locked, onTrain, onCancel }: {
   g: Game; me: Company; draft: DevSubmit; locked: boolean; onTrain: (eid: string, k: Skill) => void; onCancel: (eid: string) => void;
 }) {
@@ -178,7 +178,7 @@ function TrainCard({ g, me, draft, locked, onTrain, onCancel }: {
   const last = g.q >= totalQ(g) - 1;
   return (
     <>
-      <div className="sec-title">📚 研修 <small>空いている社員のスキルを伸ばす・来期は休み</small></div>
+      <div className="sec-title">📚 研修 <small>空いている社員のスキルを伸ばす・{TRAINING.restChance * 100}%で来期は休み</small></div>
       <div className="card">
         {list.length === 0 && <div className="note">今期は空いている社員がいません（案件・サービスの担当から外すと研修に行けます）</div>}
         {last && list.length > 0 && <div className="warn" style={{ marginBottom: 8 }}>⚠ 最後の期です。研修しても活かす期がありません</div>}
@@ -190,17 +190,17 @@ function TrainCard({ g, me, draft, locked, onTrain, onCancel }: {
               <Face name={e.name} size={26} />
               <div className="grow" style={{ minWidth: 0 }}>
                 <span className="nm">{e.name}</span>
-                {k ? <div className="note up">📚 {SKILL_ICON[k]}{SKILL_NAME[k]} {lv ? `${lv}→${lv + 1}` : '新しく習得（0→1）'}・来期は休み</div>
+                {k ? <div className="note up">📚 {SKILL_ICON[k]}{SKILL_NAME[k]} {lv ? `${lv}→${lv + 1}` : '新しく習得（0→1）'}・{e.trait === 'tough' ? '💪休みなし' : `${TRAINING.restChance * 100}%で来期は休み`}</div>
                   : <div style={{ marginTop: 2 }}><SkillChips skills={e.skills} /></div>}
               </div>
               {!locked && (k ? <button className="btn xs" onClick={() => onCancel(e.id)}>取消</button> : <button className="btn xs" onClick={() => setPickFor(e)}>研修へ</button>)}
             </div>
           );
         })}
-        <div className="note" style={{ marginTop: 8 }}>研修した社員は、選んだスキルが+1（持っていなければ新しく習得）、給料+{TRAINING.raise}。今期の決算で反映され、来期は1期お休みです{TRAINING.fee ? `（研修費 ${TRAINING.fee}万円）` : ''}。</div>
+        <div className="note" style={{ marginTop: 8 }}>研修した社員は、選んだスキルが+1（持っていなければ新しく習得）、給料+{TRAINING.raise}。今期の決算で反映されます。{TRAINING.restChance * 100}%の確率で疲れて来期は1期お休み（💪体力おばけは休まない）{TRAINING.fee ? `（研修費 ${TRAINING.fee}万円）` : ''}。</div>
       </div>
       {pickFor && (
-        <Sheet onClose={() => setPickFor(null)} title={<>📚 {pickFor.name} の研修</>} sub="伸ばすスキルを選んでください（来期は休み）">
+        <Sheet onClose={() => setPickFor(null)} title={<>📚 {pickFor.name} の研修</>} sub={`伸ばすスキルを選んでください（${pickFor.trait === 'tough' ? '💪体力おばけなので休みなし' : `${TRAINING.restChance * 100}%で来期は休み`}）`}>
           {SKILLS.map(k => {
             const lv = pickFor.skills[k] || 0;
             const ok = canTrain(g, pickFor, k);
