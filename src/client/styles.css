@@ -602,3 +602,12 @@ details.fold.secret > summary { color: var(--down); }
 .ind-list .special { color: var(--gold); }
 .special-card .seg button small { font-size: 10px; opacity: .8; font-weight: 600; }
 .special-card .seg button { white-space: normal; line-height: 1.25; }
+.svc-steps { margin: 8px 0; padding-left: 20px; font-size: 13px; line-height: 1.6; }
+.svc-ladder td, .svc-ladder th { text-align: center; padding: 4px 2px; }
+.svc-ladder td:first-child, .svc-ladder th:first-child { text-align: left; white-space: nowrap; }
+.svc-ladder td.cur { background: var(--gold-bg); font-weight: 900; }
+.lvdot { flex: 1; height: 22px; border-radius: 6px; background: var(--line); display: grid; place-items: center; font-size: 11px; font-weight: 900; color: var(--sub); }
+.lvdot.on { background: var(--gold); color: #fff; }
+.lvdot.next { background: var(--gold-bg); color: var(--gold); outline: 2px dashed var(--gold); outline-offset: -2px; }
+.svc-kpis { grid-template-columns: repeat(3, 1fr); }
+.svc-kpis .kpi .num { font-size: 20px; }

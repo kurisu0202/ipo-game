@@ -120,6 +120,7 @@ export function smartDev(g: Game, cid: string, _r: R): DevSubmit {
   }
   if (!c.service && c.cash > 900) s.launch = true;
   if (!c.skillUsed && g.q >= 2 && _r() < 0.2 && c.industry && !['sier', 'consul'].includes(c.industry) && (c.industry !== 'saas' || c.service)) s.special = true;
+  if (c.service && !c.service.branch && c.service.level >= 2) s.branch = (['toc', 'subs', 'b2b'] as const)[Math.floor(_r() * 3)];
   if (freeSeats(g, c) <= 0 && c.cash > 1500 && c.office?.items) { const plan = autoDeskPlan(c.office); if (plan) s.office = plan; }
   if (c.service || s.launch) [...free].slice(0, 2).forEach(id => { s.assign[id] = 'svc'; free.delete(id); });
   c.projects.forEach(p => { if (g.q > p.deadline - 1 && p.work - p.progress >= 2 && c.debt < 3 && projectCheck(g, c, p, s.assign).ok) s.rush.push(p.id); });

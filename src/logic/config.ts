@@ -2,7 +2,7 @@
 //  3年で上場 ― 数値設定（バランス調整はこのファイルだけで行う）
 //  金額の単位はすべて「万円」、期間の単位は「期」（四半期）
 // =====================================================================
-import type { CardKey, FundKind, IndustryKey, ItemKind, TraitKey, HappeningKey, ProjectType, Skill, SpyOrder, Tag } from './types';
+import type { BranchKey, CardKey, FundKind, IndustryKey, ItemKind, TraitKey, HappeningKey, ProjectType, Skill, SpyOrder, Tag } from './types';
 
 export const SKILLS: Skill[] = ['FE', 'BE', 'IN', 'DE', 'SE', 'AI'];
 export const SKILL_NAME: Record<Skill, string> = { FE: 'フロント', BE: 'バック', IN: 'インフラ', DE: 'デザイン', SE: 'セキュリティ', AI: 'AI' };
@@ -95,7 +95,17 @@ export const LAST_NAMES = ['佐藤', '鈴木', '高橋', '田中', '伊藤', '�
 export const FIRST_NAMES = ['翔', '陽菜', '蓮', '結衣', '湊', '葵', '大和', '凛', '悠真', 'さくら', '樹', '美咲', '颯太', '莉子', '健', '彩', '拓海', '七海', '誠', '楓', '隼人', '舞', '亮', '千尋', '直樹', 'ひかり', '大輔', '愛', '和也', '真央'];
 
 // ---------- 自社サービス ----------
-export const SERVICE = { launchCost: 300, maxLv: 5, needBase: 3, income: [0, 60, 130, 220, 330, 460], valuePerLv: 300 };
+export const SERVICE = { launchCost: 300, maxLv: 5, needBase: 3, income: [0, 60, 130, 220, 330, 460], valuePerLv: 300, branchAt: 2 };
+// 自社サービスの成長の方向（Lv2で選ぶ。選ぶまで Lv3 には上がらない）
+export interface BranchSpec { name: string; icon: string; plan: string; good: string[]; bad: string[]; incomeMult: number; skills: Skill[]; valuePerLv?: number; bidPerLv?: number; review: 'zero' | 'immune' | 'half' }
+export const BRANCHES: Record<BranchKey, BranchSpec> = {
+  toc: { name: 'toCアプリ（広告モデル）', icon: '📱', plan: 'ユーザーを一気に増やして広告で稼ぐ', incomeMult: 1.3, skills: ['FE', 'DE'], review: 'zero',
+    good: ['サービス収入×1.3'], bad: ['妨害「悪い口コミ」を受けた期は収入0'] },
+  subs: { name: 'サブスク（月額課金）', icon: '💳', plan: '解約されにくい安定収入。会社の価値を高める', incomeMult: 1, skills: ['BE', 'IN'], valuePerLv: 500, review: 'immune',
+    good: ['最終決算での価値がLv×500（ふつうは300）', '妨害「悪い口コミ」の影響を受けない'], bad: ['収入はふつう'] },
+  b2b: { name: '法人向けSaaS', icon: '🏢', plan: '大企業の導入実績で、受託の入札も有利に', incomeMult: 0.9, skills: ['SE', 'BE'], bidPerLv: 0.02, review: 'half',
+    good: ['Lvごとに入札の比較値−2%（Lv5で−10%）'], bad: ['サービス収入×0.9'] },
+};
 
 // ---------- 開発フェーズ ----------
 export const SEVERANCE_QUARTERS = 1;

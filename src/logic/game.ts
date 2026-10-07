@@ -3,7 +3,7 @@
 //  すべての乱数は g.seed から作るので、同じ入力なら同じ結果になる
 // =====================================================================
 import {
-  ABANDON, ACCUSE, AD, ADS, FUNDS, SPECIALS, GROWTH, INDUSTRIES, INVEST, OFFICE_FX, TRAINING, TRAIT, TRAITS, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
+  ABANDON, ACCUSE, AD, ADS, BRANCHES, FUNDS, SPECIALS, GROWTH, INDUSTRIES, INVEST, OFFICE_FX, TRAINING, TRAIT, TRAITS, AUDIT, BID_PCTS, BIG_GOV, BUDGET, CARDS, CLOSE_RACE, DEFENSE_FX, DEFENSE_ORDER, DESIGN_BONUS, DUMP_RATE,
   EMPLOYEE_EVENT, ENGINEER, FIRE_DEBT, FIRST_NAMES, GAME, HACKATHON, HAPPENINGS, HAPPENING_FX, HIRE_FEES, INCIDENT,
   INTERIM, INTEREST, INVESTIGATE_COST, LAST_NAMES, LATE_PENALTY, MUST_SHARE, PROJECT_TYPES, REMOTE_SALARY, RENTAL, REPEAT_BONUS,
   REP_DISCOUNT, SECRET_MULTS, SERVICE, SEVERANCE_QUARTERS, SKILLS, SKILL_NAME, SPY_STEAL,
@@ -16,6 +16,7 @@ import {
   bidFactor, canBid, hireBonus, launchCost, payFactor, rushDebt, salaryMult, serviceIncome,
   boostAll, hasSlot, projectSums, slots,
   freeSeats, meetDiscount, officeValue, rooms, seatsUsed,
+  b2bDiscount, needBranch, serviceValue,
 } from './calc';
 import { chance, int, next, pick, shuffle, weighted } from './rng';
 import { applyPlan, checkPlan, newOffice, nextTo, upgradeOffice } from './office';
@@ -377,6 +378,7 @@ function cleanDev(g: Game, cid: string, s: DevSubmit): DevSubmit {
     const chk = checkPlan(g, c, plan);
     if (chk.ok) { out.office = plan; officeCost = chk.cost; }
   }
+  if (s.branch && s.branch in BRANCHES && needBranch(c)) out.branch = s.branch;
   const dsp = c.industry && !c.skillUsed ? SPECIALS[c.industry] : undefined;
   if (s.special && dsp?.phase === 'dev' && (c.industry !== 'saas' || !!c.service)) out.special = true;
   // 投資：今年の候補に、決まった金額だけ。合計は手元の現金まで（オフィス工事の分を引いた残り）
@@ -671,7 +673,7 @@ export function resolveBid(g: Game) {
       if (!pct) return;
       const banned = c.effects.noBid === q;
       const amount = bidAmount(p.budget, pct, c.effects.dump === q);
-      entries.push({ c, amount, cmp: amount * (1 - REP_DISCOUNT * c.rep) * bidFactor(c, p.type) * (1 - meetDiscount(c)), banned });
+      entries.push({ c, amount, cmp: amount * (1 - REP_DISCOUNT * c.rep) * bidFactor(c, p.type) * (1 - meetDiscount(c)) * (1 - b2bDiscount(c)), banned });
     });
     const valid = entries.filter(x => !x.banned);
     const spec = PROJECT_TYPES[p.type];
@@ -969,16 +971,30 @@ export function resolveDev(g: Game) {
     if (refactor && c.debt > 0) { const v = Math.min(c.debt, refactor); c.debt -= v; L(c, `🧹 リファクタ魔のおかげで負債−${v}`, 'good'); }
     // 13. サービス
     if (c.service) {
+      if (s.branch && needBranch(c)) {
+        c.service.branch = s.branch;
+        L(c, `${BRANCHES[s.branch].icon} 自社サービスは「${BRANCHES[s.branch].name}」の路線へ！`, 'gold');
+        headlines.push(`${c.name}のサービス、${BRANCHES[s.branch].name}に舵を切る`);
+      }
       const power = servicePower(g, c, undefined, true);
       if (!stopped && c.service.level < SERVICE.maxLv && power >= serviceNeed(c)) {
-        c.service.level++;
-        L(c, `自社サービスが Lv${c.service.level} に成長！`, 'gold');
-        if (c.service.level >= 4) headlines.push(`${c.name}のサービス、Lv${c.service.level}の人気に`);
+        if (needBranch(c)) L(c, `自社サービスはLvアップの条件を満たしたが、成長の方向が決まっていないため Lv${c.service.level} のまま`, 'muted');
+        else {
+          c.service.level++;
+          L(c, `自社サービスが Lv${c.service.level} に成長！`, 'gold');
+          if (c.service.level >= 4) headlines.push(`${c.name}のサービス、Lv${c.service.level}の人気に`);
+        }
       }
+      const br = c.service.branch ? BRANCHES[c.service.branch] : undefined;
       let inc = serviceIncome(c, c.service.level);
-      if (c.effects.review === q) inc = Math.floor(inc / 2);
+      let note = '';
+      if (c.effects.review === q) {
+        if (br?.review === 'immune') note = '（サブスクなので口コミ被害なし）';
+        else if (br?.review === 'zero') { inc = 0; note = '（口コミ被害で今期は0…）'; }
+        else { inc = Math.floor(inc / 2); note = '（口コミ被害で半減）'; }
+      }
       if (c.effects.buzz === q) inc *= 2;
-      if (inc) { c.cash += inc; L(c, `サービス収入 +${inc}${c.effects.review === q ? '（口コミ被害で半減）' : ''}`, 'good'); }
+      if (inc || note) { c.cash += inc; L(c, `サービス収入 +${inc}${note}`, inc ? 'good' : 'bad'); }
     }
 
     // 14. リファクタリング
@@ -1293,7 +1309,7 @@ export function finalize(g: Game) {
   const rows: FinalRow[] = g.companies.map(c => {
     const stocks = c.stocks.map(() => pick(g, STOCK_VALUES));
     const stockTotal = stocks.reduce((t, v) => t + v, 0);
-    const service = (c.service?.level || 0) * SERVICE.valuePerLv;
+    const service = serviceValue(c);
     const office = officeValue(c);
     const total = c.cash + service + stockTotal + office;
     return { id: c.id, name: c.name, cash: c.cash, service, stocks, stockTotal, office, total, profit: total - GAME.startCash, rank: 0, awards: [] };

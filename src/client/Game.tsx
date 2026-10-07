@@ -1,7 +1,7 @@
 // ===== ゲーム画面 =====
 import { useEffect, useMemo, useState } from 'react';
-import { ADS, CARDS, GAME, HAPPENINGS, PROJECT_TYPES, SEASONS, SERVICE } from '../logic/config';
-import { effSkills, payroll, projectCheck, quarterLabel, salaryMult, season, serviceIncome, slots, totalQ, totalYears, working, yen } from '../logic/calc';
+import { ADS, BRANCHES, CARDS, GAME, HAPPENINGS, PROJECT_TYPES, SEASONS } from '../logic/config';
+import { effSkills, serviceValue, payroll, projectCheck, quarterLabel, salaryMult, season, serviceIncome, slots, totalQ, totalYears, working, yen } from '../logic/calc';
 import { defaultDev, emptyBid } from '../logic/game';
 import type { ActiveProject, BidSubmit, Company, DevSubmit, Engineer, Game as G } from '../logic/types';
 import type { PlayerView } from '../logic/view';
@@ -187,7 +187,7 @@ function MeTab({ v, me }: { v: PlayerView; me: Company }) {
         <div className="kpi"><small>💴 現金</small><span className={`num ${me.cash < 0 ? 'down' : ''}`}>{me.cash.toLocaleString()}<small>万円</small></span></div>
         <div className="kpi"><small>⭐ 評判</small><span className="num">{me.rep}</span><div className="note">入札の比較で{Math.abs(me.rep * 3)}%{me.rep >= 0 ? '有利' : '不利'}</div></div>
         <div className="kpi"><small>🧾 負債</small><span className={`num ${me.debt >= 6 ? 'down' : me.debt >= 4 ? 'gold' : ''}`}>{me.debt}</span><div className="note">{me.debt >= 6 ? '本番障害が起きる！' : '6以上で本番障害'}</div></div>
-        <div className="kpi"><small>🚀 サービス</small><span className="num">{me.service ? `Lv${me.service.level}` : 'なし'}</span><div className="note">{me.service ? `毎期${serviceIncome(me, me.service.level)}・価値${me.service.level * SERVICE.valuePerLv}` : '開発タブで立ち上げ'}</div></div>
+        <div className="kpi"><small>🚀 サービス</small><span className="num">{me.service ? `Lv${me.service.level}` : 'なし'}</span><div className="note">{me.service ? `毎期${serviceIncome(me, me.service.level)}・価値${serviceValue(me)}${me.service.branch ? `・${BRANCHES[me.service.branch].icon}` : ''}` : '開発タブで立ち上げ'}</div></div>
       </div>
       <div className="card" style={{ marginTop: 10 }}><div className="row"><b>現金の推移</b><span className="grow" /><span className="note">開始 {GAME.startCash}</span></div><Sparkline values={me.history} color={companyColor(g, me.id)} /></div>
       <div className="sec-title">👥 社員 <span className="n">{me.engineers.length}</span><small>給料の合計 {pay}万円/期（貸し出し中を含む{salaryMult(me) !== 1 ? `・業種で×${salaryMult(me)}` : ''}）</small></div>

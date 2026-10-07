@@ -1,5 +1,5 @@
 // ===== 計算ヘルパー（解決処理と画面の両方で使う） =====
-import { GAME, GROWTH, INDUSTRIES, INDUSTRY_BID, INDUSTRY_HIRE_BONUS, OFFICE, OFFICE_FX, RUSH_DEBT, SERVICE, SKILLS } from './config';
+import { BRANCHES, GAME, GROWTH, INDUSTRIES, INDUSTRY_BID, INDUSTRY_HIRE_BONUS, OFFICE, OFFICE_FX, RUSH_DEBT, SERVICE, SKILLS } from './config';
 import type { ActiveProject, Company, Engineer, Game, ItemKind, ProjectType, Skill, Skills } from './types';
 
 /** このゲームの全期数と年数 */
@@ -93,9 +93,18 @@ export function boostAll(e: Engineer) {
 export function serviceNeed(c: Company) {
   return Math.max(1, SERVICE.needBase + (c.service?.level || 0) - OFFICE_FX.serverDown * rooms(c, 'server'));
 }
+/** サービス担当のスキル合計（成長の方向で決まったスキルは2倍で数える） */
 export function servicePower(g: Game, c: Company, assign?: Record<string, string>, real = false) {
-  return skillSum(sumSkills(g, c, assignees(c, 'svc', assign), real));
+  const sums = sumSkills(g, c, assignees(c, 'svc', assign), real);
+  const br = c.service?.branch ? BRANCHES[c.service.branch] : undefined;
+  return SKILLS.reduce((t, k) => t + (sums[k] || 0) * (br?.skills.includes(k) ? 2 : 1), 0);
 }
+/** 成長の方向を選ばないと上がれないレベルに来ているか */
+export const needBranch = (c: Pick<Company, 'service'>) => !!c.service && !c.service.branch && c.service.level >= SERVICE.branchAt;
+/** 最終決算でのサービスの価値 */
+export const serviceValue = (c: Pick<Company, 'service'>) => (c.service?.level || 0) * (c.service?.branch ? BRANCHES[c.service.branch].valuePerLv ?? SERVICE.valuePerLv : SERVICE.valuePerLv);
+/** 法人向けSaaS：入札の比較値の割引 */
+export const b2bDiscount = (c: Pick<Company, 'service'>) => (c.service?.branch ? (BRANCHES[c.service.branch].bidPerLv || 0) * c.service.level : 0);
 
 /** 自社が給料を払う社員（借りている社員を除く＋他社に貸している社員） */
 export function payroll(g: Game, c: Company): Engineer[] {
@@ -126,7 +135,7 @@ export function payFactor(c: Pick<Company, 'industry'>, t: ProjectType) {
 }
 export const hireBonus = (c: Pick<Company, 'industry'>, e: Engineer) => (industryOf(c)?.hireSkills?.some(k => (e.skills[k] || 0) > 0) ? INDUSTRY_HIRE_BONUS : 0);
 export const launchCost = (c: Pick<Company, 'industry'>) => round10(SERVICE.launchCost * (industryOf(c)?.launchMult ?? 1));
-export const serviceIncome = (c: Pick<Company, 'industry'>, lv: number) => round10(SERVICE.income[lv] * (industryOf(c)?.serviceMult ?? 1));
+export const serviceIncome = (c: Pick<Company, 'industry'> & { service?: Company['service'] }, lv: number, branch = c.service?.branch) => round10(SERVICE.income[lv] * (industryOf(c)?.serviceMult ?? 1) * (branch ? BRANCHES[branch].incomeMult : 1));
 export const salaryMult = (c: Pick<Company, 'industry'>) => industryOf(c)?.salaryMult ?? 1;
 export const rushDebt = (c: Pick<Company, 'industry'>) => industryOf(c)?.rushDebt ?? RUSH_DEBT;
 

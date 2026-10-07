@@ -7,6 +7,7 @@ export type CardKey = 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7' | 'A8' | 'A
 export type HappeningKey = 'H1' | 'H2' | 'H3' | 'H4' | 'H5' | 'H6' | 'H7' | 'H8' | 'H9' | 'H10' | 'H11' | 'H12' | 'H13' | 'H14' | 'H15' | 'H16' | 'H17' | 'H18';
 export type IndustryKey = 'sier' | 'web' | 'saas' | 'ai' | 'maint' | 'consul';
 export type TraitKey = 'multi' | 'fast' | 'fire' | 'night' | 'refactor' | 'leader' | 'mentor' | 'mood' | 'sales' | 'cheap' | 'investor' | 'genius' | 'hopper' | 'tough' | 'study' | 'gambler';
+export type BranchKey = 'toc' | 'subs' | 'b2b';
 export type ItemKind = 'desk' | 'rest' | 'meet' | 'bigmeet' | 'lab' | 'server' | 'refresh' | 'sec';
 /** オフィスに置いたもの（x,y は左上のマス、rot は 90度回転の回数） */
 export interface Placed { id: string; kind: ItemKind; x: number; y: number; rot: number }
@@ -59,7 +60,7 @@ export interface Effects { slack?: number; review?: number; noBid?: number; noHi
 export interface Company {
   id: string; name: string; cash: number; rep: number; debt: number;
   engineers: Engineer[]; projects: ActiveProject[];
-  service: { level: number } | null;
+  service: { level: number; branch?: BranchKey } | null;
   hand: CardKey[]; stocks: number[]; aiKnowhow: number;
   effects: Effects;
   trolls: { from: string; left: number }[];
@@ -104,6 +105,7 @@ export interface DevSubmit {
   invest?: Record<string, number>; // 投資先 → 金額
   office?: OfficePlan;             // オフィスの増床・配置・席替え
   special?: boolean;               // 業種の必殺技（開発フェーズで使うもの）
+  branch?: BranchKey;              // 自社サービスの成長の方向（Lv2で選ぶ）
   rush: string[];
   drop?: string[];   // 放棄する案件
   launch: boolean;

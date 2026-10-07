@@ -1,9 +1,9 @@
 // ===== 開発タブ =====
 import { useState } from 'react';
-import { ABANDON, FUNDS, GROWTH, INVEST, INVESTIGATE_COST, SPECIALS, TRAINING, TRAITS, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS, xpNeed } from '../logic/config';
-import { assignees, effSkills, hasSlot, launchCost, projectCheck, quarterLabel, rushDebt, season, serviceIncome, servicePower, skillSum, slots, sumSkills, toggleSlot, totalQ, working } from '../logic/calc';
+import { ABANDON, BRANCHES, FUNDS, GROWTH, INVEST, INVESTIGATE_COST, SPECIALS, TRAINING, TRAITS, PROJECT_TYPES, RENTAL, SERVICE, SKILLS, SKILL_ICON, SKILL_NAME, SPY_ORDER_DESC, SPY_ORDER_NAME, TAGS, xpNeed } from '../logic/config';
+import { assignees, effSkills, hasSlot, launchCost, needBranch, serviceNeed, projectCheck, quarterLabel, rushDebt, season, serviceIncome, servicePower, slots, sumSkills, toggleSlot, totalQ, working } from '../logic/calc';
 import { abandonFee, canTrain, pendingSpies } from '../logic/game';
-import type { ActiveProject, Company, DevSubmit, Engineer, Game, Skill, SpyOrder } from '../logic/types';
+import type { ActiveProject, BranchKey, Company, DevSubmit, Engineer, Game, Skill, SpyOrder } from '../logic/types';
 import type { PlayerView } from '../logic/view';
 import { Coach, SecretFile } from './parts';
 import { OfficeView, planCost } from './Office';
@@ -102,7 +102,8 @@ export function DevTab({ v, me, draft, set, locked }: P) {
 
       <div className="sec-title">🚀 自社サービス</div>
       <ServiceCard g={g} me={me} draft={draft} assign={assign} locked={locked} onOpen={() => setSheet('svc')} onRemove={eid => setAssign(eid, '')}
-        onLaunch={() => { sfx.coin(); set(d => ({ ...d, launch: !d.launch, assign: d.launch ? Object.fromEntries(Object.entries(d.assign).map(([k, x]) => [k, x === 'svc' ? '' : x])) : d.assign })); }} />
+        onLaunch={() => { sfx.coin(); set(d => ({ ...d, launch: !d.launch, assign: d.launch ? Object.fromEntries(Object.entries(d.assign).map(([k, x]) => [k, x === 'svc' ? '' : x])) : d.assign })); }}
+        onBranch={b => { sfx.tap(); set(d => ({ ...d, branch: b })); }} />
 
       <div className="sec-title">🏢 オフィス <small>デスクの数が社員の上限・部屋の形と置き場所で効果</small></div>
       <div className="card"><OfficeView g={g} me={me} plan={draft.office} editable={!locked} onPlan={o => { sfx.tap(); set(d => ({ ...d, office: planIsEmpty(o) ? undefined : o })); }} /></div>
@@ -394,45 +395,100 @@ function ProjectDevCard({ g, me, p, assign, rush, locked, onOpen, onFill, onRemo
   );
 }
 
-function ServiceCard({ g, me, draft, assign, locked, onOpen, onRemove, onLaunch }: {
-  g: Game; me: Company; draft: DevSubmit; assign: Record<string, string>; locked: boolean; onOpen: () => void; onRemove: (eid: string) => void; onLaunch: () => void;
+function ServiceCard({ g, me, draft, assign, locked, onOpen, onRemove, onLaunch, onBranch }: {
+  g: Game; me: Company; draft: DevSubmit; assign: Record<string, string>; locked: boolean; onOpen: () => void; onRemove: (eid: string) => void; onLaunch: () => void; onBranch: (b?: BranchKey) => void;
 }) {
+  const ladder = (branch?: BranchKey) => (
+    <table className="ptable svc-ladder">
+      <thead><tr><th>Lv</th>{[1, 2, 3, 4, 5].map(i => <th key={i}>{i}</th>)}</tr></thead>
+      <tbody>
+        <tr><td>収入/期</td>{[1, 2, 3, 4, 5].map(i => <td key={i} className={i === (me.service?.level || 0) ? 'cur' : ''}>{serviceIncome(me, i, branch)}</td>)}</tr>
+        <tr><td>価値</td>{[1, 2, 3, 4, 5].map(i => <td key={i} className={i === (me.service?.level || 0) ? 'cur' : ''}>{i * (branch ? BRANCHES[branch].valuePerLv ?? SERVICE.valuePerLv : SERVICE.valuePerLv)}</td>)}</tr>
+      </tbody>
+    </table>
+  );
   if (!me.service && !draft.launch) {
     return (
-      <div className="card">
-        <b>まだ自社サービスがありません</b>
-        <p className="note" style={{ margin: '6px 0 10px' }}>{launchCost(me)}万円で立ち上げ。担当社員のスキル合計が「3＋Lv」以上だとLvが1上がり、毎期の収入が増えます（Lv1:{serviceIncome(me, 1)} → Lv5:{serviceIncome(me, 5)}）。最終決算ではLv×{SERVICE.valuePerLv}万円の価値。</p>
-        <button className="btn gold big" disabled={locked} onClick={onLaunch}>🚀 {launchCost(me)}万円で立ち上げる</button>
+      <div className="card svc">
+        <b>🚀 自社サービス（まだありません）</b>
+        <ol className="svc-steps">
+          <li><b>立ち上げる</b>：{launchCost(me)}万円（1回だけ）</li>
+          <li><b>社員を担当にする</b>：担当のスキル合計が条件（Lv0なら{SERVICE.needBase}）を超えた期の決算でLv+1。上がるたびに条件も+1</li>
+          <li><b>毎期の収入</b>が入り、最終決算では<b>Lvに応じた価値</b>が資産になる</li>
+          <li>Lv{SERVICE.branchAt}になったら<b>成長の方向</b>（toC・サブスク・法人向け）を選ぶ</li>
+        </ol>
+        {ladder()}
+        <button className="btn gold big" style={{ marginTop: 10 }} disabled={locked} onClick={onLaunch}>🚀 {launchCost(me)}万円で立ち上げる</button>
       </div>
     );
   }
   const lv = me.service?.level || 0;
-  const need = 3 + lv;
-  const power = servicePower(g, me, assign);
+  const chosen = me.service?.branch || draft.branch;
+  const view = { ...me, service: me.service ? { ...me.service, branch: chosen } : { level: 0, branch: chosen } };
+  const need = serviceNeed(view);
+  const power = servicePower(g, view, assign);
   const team = assignees(me, 'svc', assign);
+  const br = chosen ? BRANCHES[chosen] : undefined;
+  const blocked = lv >= SERVICE.branchAt && !chosen;
+  const inc = serviceIncome(me, lv, chosen);
+  const nextInc = lv < SERVICE.maxLv ? serviceIncome(me, lv + 1, chosen) : inc;
+  const value = lv * (br?.valuePerLv ?? SERVICE.valuePerLv);
   return (
-    <div className="card">
+    <div className="card svc">
       <div className="row">
-        <div className="grow"><b>{draft.launch ? '🚀 今期立ち上げ予定' : `自社サービス Lv${lv}`}</b>
-          <div className="note">収入 {serviceIncome(me, lv)}万円/期{me.effects.review === g.q ? '（口コミ被害で今期は半分）' : ''}・価値 {lv * SERVICE.valuePerLv}万円</div></div>
+        <div className="grow"><b>{draft.launch ? '🚀 今期立ち上げ予定' : '🚀 自社サービス'}</b> <span className="chip gold">Lv{lv}</span>{br && <span className="chip ind" style={{ marginLeft: 4 }}>{br.icon}{br.name}</span>}</div>
         {draft.launch && !locked && <button className="btn xs" onClick={onLaunch}>取りやめ</button>}
       </div>
       <div className="row" style={{ gap: 4, margin: '10px 0' }}>
-        {[1, 2, 3, 4, 5].map(i => <span key={i} style={{ flex: 1, height: 8, borderRadius: 4, background: i <= lv ? 'var(--gold)' : 'var(--line)' }} />)}
+        {[1, 2, 3, 4, 5].map(i => <span key={i} className={`lvdot ${i <= lv ? 'on' : ''} ${i === lv + 1 && power >= need && !blocked ? 'next' : ''}`}>{i}</span>)}
       </div>
-      {lv < SERVICE.maxLv ? (
-        <div className={`gauge ${power < need ? 'short' : ''}`}>
-          <div className="gh"><span>Lvアップ条件（担当スキル合計）</span><span>{power}/{need}{power >= need ? ' ✓ Lvアップ！' : ` あと${need - power}`}</span></div>
-          <div className="gb"><i style={{ width: `${Math.min(100, power / need * 100)}%` }} /></div>
+      <div className="kpis svc-kpis">
+        <div className="kpi"><small>今の収入</small><span className="num">{inc}<small>/期</small></span>{me.effects.review === g.q && <div className="note down">口コミ被害あり</div>}</div>
+        <div className="kpi"><small>次のLvの収入</small><span className="num up">{lv < SERVICE.maxLv ? `+${nextInc - inc}` : '最大'}</span><div className="note">Lv{Math.min(SERVICE.maxLv, lv + 1)}で{nextInc}/期</div></div>
+        <div className="kpi"><small>最終決算の価値</small><span className="num gold">{value.toLocaleString()}</span><div className="note">Lv×{br?.valuePerLv ?? SERVICE.valuePerLv}</div></div>
+      </div>
+
+      {me.service && needBranch(me) && (
+        <div className="branch-pick">
+          <div className="sec-title" style={{ marginTop: 10 }}>🔀 成長の方向を選ぶ <small>選ぶまでLv{SERVICE.branchAt + 1}には上がりません・あとから変更不可</small></div>
+          {(Object.keys(BRANCHES) as BranchKey[]).map(k => {
+            const b = BRANCHES[k];
+            const on = draft.branch === k;
+            return (
+              <button key={k} className={`card ind-card ${on ? 'selected' : ''}`} disabled={locked} onClick={() => onBranch(on ? undefined : k)}>
+                <div className="row"><span className="ind-icon" style={{ fontSize: 28 }}>{b.icon}</span><div className="grow"><b>{b.name}</b><div className="note">{b.plan}</div></div><span className="check" style={{ color: 'var(--accent)' }}>{on ? '✓' : ''}</span></div>
+                <ul className="ind-list">
+                  {b.good.map(t => <li key={t} className="up">◎ {t}</li>)}
+                  {b.bad.map(t => <li key={t} className="down">△ {t}</li>)}
+                  <li>📈 Lvアップの判定で {b.skills.map(x => SKILL_NAME[x]).join('・')} を2倍で数える</li>
+                </ul>
+              </button>
+            );
+          })}
         </div>
-      ) : <div className="okbar">🏆 最大レベル！</div>}
+      )}
+
+      {lv < SERVICE.maxLv ? (
+        <div className={`gauge ${power < need || blocked ? 'short' : ''}`} style={{ marginTop: 10 }}>
+          <div className="gh"><span>Lvアップ条件：担当のスキル合計</span><span>{power}/{need}{blocked ? '（方向を選ぶまで止まる）' : power >= need ? ` ✓ 今期の決算でLv${lv + 1}に！` : ` あと${need - power}`}</span></div>
+          <div className="gb"><i style={{ width: `${Math.min(100, power / Math.max(1, need) * 100)}%` }} /></div>
+        </div>
+      ) : <div className="okbar" style={{ marginTop: 10 }}>🏆 最大レベル！</div>}
+      {br && <div className="note" style={{ marginTop: 4 }}>{br.skills.map(x => `${SKILL_ICON[x]}${SKILL_NAME[x]}`).join('・')} は2倍で数えます</div>}
+
       <div style={{ marginTop: 8 }}>
-        {team.map(e => (
-          <div className="member" key={e.id}><Face name={e.name} size={26} /><span className="nm">{e.name}</span><span className="grow note">スキル計 {skillSum(effSkills(g, me, e))}</span>
-            {!locked && <button className="btn xs" onClick={() => onRemove(e.id)}>外す</button>}</div>
-        ))}
+        {team.map(e => {
+          const s = effSkills(g, me, e);
+          const pts = SKILLS.reduce((t, k) => t + (s[k] || 0) * (br?.skills.includes(k) ? 2 : 1), 0);
+          return (
+            <div className="member" key={e.id}><Face name={e.name} size={26} /><span className="nm">{e.name}</span>{!working(g, e) && <span className="tagx">休み</span>}<span className="grow note">+{working(g, e) ? pts : 0}</span>
+              {!locked && <button className="btn xs" onClick={() => onRemove(e.id)}>外す</button>}</div>
+          );
+        })}
+        {!team.length && <div className="note">担当の社員がいません。割り当てるとLvが上がります</div>}
       </div>
       {!locked && <button className="btn sm" style={{ width: '100%', marginTop: 8 }} onClick={onOpen}>＋ 社員を割り当てる</button>}
+      <details className="fold" style={{ marginTop: 8 }}><summary>Lvごとの収入と価値</summary><div className="fold-body">{ladder(chosen)}</div></details>
     </div>
   );
 }
@@ -577,6 +633,8 @@ export function devSummary(g: Game, me: Company, d: DevSubmit) {
   if (fired) parts.push({ t: `解雇 ${fired}人`, w: true });
   if (trained) parts.push({ t: `研修 ${trained}人` });
   if (d.special && me.industry) parts.push({ t: `必殺技「${SPECIALS[me.industry].name}」` });
+  if (d.branch) parts.push({ t: `サービス：${BRANCHES[d.branch].name}` });
+  else if (needBranch(me)) parts.push({ t: 'サービスの方向が未選択', w: true });
   const work = planCost(me, d.office);
   if (work) parts.push({ t: `工事 ${work.toLocaleString()}` });
   const inv = Object.values(d.invest || {}).reduce((t, v) => t + v, 0);

@@ -657,3 +657,40 @@ describe('業種の必殺技', () => {
     expect(Object.keys(SPECIALS)).toHaveLength(6);
   });
 });
+
+describe('自社サービスの成長の方向', () => {
+  const setup = (level: number, branch?: 'toc' | 'subs' | 'b2b') => {
+    const g = two(); cleanHands(g); g.q = 0; g.phase = 'dev';
+    const a = co(g, 'a');
+    a.service = { level, branch };
+    a.engineers = [eng('s', { FE: 9, BE: 9 }, { assign: 'svc' })];
+    a.projects = []; a.cash = 0;
+    return { g, a };
+  };
+  it('Lv2で方向を選ぶまでLv3に上がらない。選んだ期から上がる', () => {
+    const { g, a } = setup(2);
+    devOnly(g);
+    expect(a.service!.level).toBe(2);
+    const t = setup(2);
+    devOnly(t.g, (c, s) => { if (c.id === 'a') s.branch = 'toc'; });
+    expect(t.a.service).toEqual({ level: 3, branch: 'toc' });
+  });
+  it('toCは収入×1.5で口コミ被害なら0、サブスクは口コミ被害なし・価値Lv×500、法人向けは入札が有利', () => {
+    const toc = setup(5, 'toc'); toc.a.effects.review = 0;
+    devOnly(toc.g);
+    expect(toc.g.reveal!.blocks.some(b => b.lines.some(l => l.text.includes('サービス収入 +0')))).toBe(true);
+    const sub = setup(5, 'subs'); sub.a.effects.review = 0;
+    devOnly(sub.g);
+    expect(sub.g.reveal!.blocks.some(b => b.lines.some(l => l.text.includes('サブスクなので口コミ被害なし')))).toBe(true);
+    const g2 = two(); cleanHands(g2);
+    co(g2, 'a').service = { level: 5, branch: 'b2b' };
+    g2.market = [proj('p1', 1000)];
+    bidOnly(g2, { a: { bids: { p1: 100 } }, b: { bids: { p1: 100 } } });   // 1000×0.95 < 1000
+    expect(co(g2, 'a').projects[0]?.id).toBe('p1');
+    const fin = createGame([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], 3, 'x', 8, false);
+    co(fin, 'a').service = { level: 3, branch: 'subs' };
+    fin.q = 7; fin.phase = 'dev';
+    devOnly(fin);
+    expect(fin.final!.find(r => r.id === 'a')!.service).toBeGreaterThanOrEqual(1500);
+  });
+});
