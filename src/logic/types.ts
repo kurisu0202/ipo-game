@@ -7,6 +7,12 @@ export type CardKey = 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6' | 'A7' | 'A8' | 'A
 export type HappeningKey = 'H1' | 'H2' | 'H3' | 'H4' | 'H5' | 'H6' | 'H7' | 'H8' | 'H9' | 'H10' | 'H11' | 'H12' | 'H13' | 'H14' | 'H15' | 'H16' | 'H17' | 'H18';
 export type IndustryKey = 'sier' | 'web' | 'saas' | 'ai' | 'maint' | 'consul';
 export type TraitKey = 'multi' | 'fast' | 'fire' | 'night' | 'refactor' | 'leader' | 'mentor' | 'mood' | 'sales' | 'cheap' | 'investor' | 'genius' | 'hopper' | 'tough' | 'study' | 'gambler';
+/** 帳簿の勘定科目（現金の増減をどの科目で記録したか） */
+export type Acct = 'project' | 'service' | 'salary' | 'hire' | 'ad' | 'training' | 'launch' | 'remodel' | 'rent' | 'severance' | 'research'
+  | 'nonopIn' | 'nonopOut' | 'interest' | 'invgain' | 'loss' | 'capex' | 'invest';
+export type Books = Partial<Record<Acct, number>>;
+/** 期末の貸借対照表（簡易） */
+export interface BS { cash: number; invest: number; office: number; service: number; stocks: number }
 export type BotLevel = 'easy' | 'normal';
 export type BranchKey = 'toc' | 'subs' | 'b2b';
 export type ItemKind = 'desk' | 'rest' | 'meet' | 'bigmeet' | 'lab' | 'server' | 'refresh' | 'sec';
@@ -70,6 +76,8 @@ export interface Company {
   spyOrdersLeft: number; honestLoans: number; honestAwarded: boolean;
   industry?: IndustryKey;          // 選んだ業種
   bot?: BotLevel;                  // CPU（自動で提出する）
+  books?: Record<string, Books>;   // 期ごとの帳簿（PL のもと。本人だけに見える）
+  bsHist?: Record<string, BS>;     // 期末の貸借対照表
   skillUsed?: boolean;             // 業種の必殺技を使ったか（1ゲーム1回）
   invest?: Holding[];              // 今年の投資（冬の決算で結果が出る。本人だけに見える）
   office?: Office;                 // 自社オフィス（作業マスの数＝社員の上限）

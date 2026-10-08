@@ -21,7 +21,7 @@ import {
 import { chance, int, next, pick, shuffle, weighted } from './rng';
 import { applyPlan, checkPlan, newOffice, nextTo, upgradeOffice } from './office';
 import type {
-  ActiveProject, BidPct, BidSubmit, BotLevel, Fund, FundKind, IndustryKey, OfficePlan, PickSubmit, TraitKey, CardKey, Company, DevSubmit, Engineer, FinalRow, Game, HappeningKey, HireFee,
+  Acct, ActiveProject, BS, BidPct, BidSubmit, BotLevel, Fund, FundKind, IndustryKey, OfficePlan, PickSubmit, TraitKey, CardKey, Company, DevSubmit, Engineer, FinalRow, Game, HappeningKey, HireFee,
   Project, ProjectType, RevealBlock, RevealLine, Skill, Skills, SpyOrder, Tag,
 } from './types';
 
@@ -260,14 +260,14 @@ export function startQuarter(g: Game) {
       log(g, `${SKILL_NAME[k]}スキルを持つ全社員のスキル+1${h === 'H6' ? '・給料+10' : ''}`);
       break;
     }
-    case 'H7': g.companies.forEach(c => { const v = c.engineers.length * HAPPENING_FX.rentPerHead; c.cash -= v; log(g, `${c.name}：賃料 −${v}`); }); break;
+    case 'H7': g.companies.forEach(c => { const v = c.engineers.length * HAPPENING_FX.rentPerHead; book(g, c, 'rent', -v); log(g, `${c.name}：賃料 −${v}`); }); break;
     case 'H8': g.companies.forEach(c => { if (!c.engineers.length) return; if (c.engineers.some(x => x.trait === 'mood')) { log(g, `${c.name}：ムードメーカーのおかげでインフルエンザの休みなし`); return; } const e = pick(g, c.engineers); if (nextTo(g, c, e.id, 'rest')) { log(g, `${c.name}：${e.name}は休憩室のとなりの席でインフルエンザを防いだ`); return; } e.restQ = g.q; log(g, `${c.name}：${e.name} がインフルエンザで休み`); }); break;
     case 'H10': g.companies.forEach(c => c.projects.forEach(p => { p.deadline++; })); break;
-    case 'H13': g.companies.forEach(c => { if (c.service && c.service.level >= 1) { c.cash += HAPPENING_FX.subsidy; log(g, `${c.name}：補助金 +${HAPPENING_FX.subsidy}`); } }); break;
+    case 'H13': g.companies.forEach(c => { if (c.service && c.service.level >= 1) { book(g, c, 'nonopIn', HAPPENING_FX.subsidy); log(g, `${c.name}：補助金 +${HAPPENING_FX.subsidy}`); } }); break;
     case 'H14': pool.push(genEngineer(g, 'legend')); break;
     case 'H16': g.companies.forEach(c => {
-      if (c.debt >= HAPPENING_FX.bounty.high) { const v = c.debt * HAPPENING_FX.bounty.perDebt; c.cash -= v; log(g, `${c.name}：バグ報奨金 −${v}`); }
-      else if (c.debt <= HAPPENING_FX.bounty.low) { c.cash += HAPPENING_FX.bounty.reward; log(g, `${c.name}：バグ報奨金ゼロで +${HAPPENING_FX.bounty.reward}`); }
+      if (c.debt >= HAPPENING_FX.bounty.high) { const v = c.debt * HAPPENING_FX.bounty.perDebt; book(g, c, 'loss', -v); log(g, `${c.name}：バグ報奨金 −${v}`); }
+      else if (c.debt <= HAPPENING_FX.bounty.low) { book(g, c, 'nonopIn', HAPPENING_FX.bounty.reward); log(g, `${c.name}：バグ報奨金ゼロで +${HAPPENING_FX.bounty.reward}`); }
     }); break;
     case 'H17': g.companies.forEach(c => drawCard(g, c)); break;
     default: break;
@@ -526,7 +526,7 @@ export function resolveBid(g: Game) {
     if (a === undefined || !ADS[a]) return;
     const ad = ADS[a];
     const up = Math.max(0, Math.min(ad.rep, AD.maxRep - (c.adRep || 0)));
-    c.cash -= ad.cost;
+    book(g, c, 'ad', -ad.cost);
     c.rep += up;
     c.adRep = (c.adRep || 0) + up;
     adLines.push({ text: `${c.name}：${ad.icon}${ad.name}（−${ad.cost}）→ 評判+${up}（${c.rep}・冬まで）`, tone: 'good' });
@@ -573,8 +573,8 @@ export function resolveBid(g: Game) {
           lines.push({ text: 'カウンターオファーで逆にエースを引き抜く！', tone: 'good' });
           headhunt(g, def, atk, lines);
         }
-        if (dk === 'D5') { atk.cash -= DEFENSE_FX.D5fine; lines.push({ text: `${atk.name}に罰金${DEFENSE_FX.D5fine}`, tone: 'good' }); }
-        if (dk === 'D8') { atk.cash -= DEFENSE_FX.D8take; def.cash += DEFENSE_FX.D8take; lines.push({ text: `${def.name}が ${atk.name} から${DEFENSE_FX.D8take}を受け取った`, tone: 'good' }); }
+        if (dk === 'D5') { book(g, atk, 'loss', -DEFENSE_FX.D5fine); lines.push({ text: `${atk.name}に罰金${DEFENSE_FX.D5fine}`, tone: 'good' }); }
+        if (dk === 'D8') { book(g, atk, 'loss', -DEFENSE_FX.D8take); book(g, def, 'nonopIn', DEFENSE_FX.D8take); lines.push({ text: `${def.name}が ${atk.name} から${DEFENSE_FX.D8take}を受け取った`, tone: 'good' }); }
         stamp = { type: 'block', text: 'ブロック！', tone: 'good' };
       }
     } else {
@@ -724,7 +724,7 @@ export function resolveBid(g: Game) {
     const win = pick(g, tied);
     if (tied.length > 1) head.text += `（${tied.map(x => x.c.name).join('・')}が同額・同評判のため抽選）`;
     else if (sameFee) head.text += '（同額のため評判で決定）';
-    win.c.cash -= win.fee;
+    book(g, win.c, 'hire', -win.fee);
     win.c.engineers.push({ ...e, assign: null });
     win.c.stats.hires++;
     flips.forEach(f => { if (f.label === win.c.name) (f as { win?: boolean }).win = true; });
@@ -779,7 +779,7 @@ function doTraining(g: Game, c: Company, s: DevSubmit, L: (c: Company, text: str
     if (e.xp) delete e.xp[k];
     e.salary += TRAINING.raise;
     e.trainedQ = g.q;
-    if (TRAINING.fee) c.cash -= TRAINING.fee;
+    if (TRAINING.fee) book(g, c, 'training', -TRAINING.fee);
     if (!e.trait && chance(g, TRAIT.train + (nextTo(g, c, e.id, 'lab') ? OFFICE_FX.labAdjUp : 0))) {
       grantTrait(e, rollTrait(g));
       L(c, `✨ ${e.name} が研修で特技【${TRAITS[e.trait!].icon}${TRAITS[e.trait!].name}】に目覚めた！`, 'gold');
@@ -803,6 +803,23 @@ function doTraining(g: Game, c: Company, s: DevSubmit, L: (c: Company, text: str
       }
     }
   }
+}
+
+/** 現金を動かして帳簿に記録する（v は現金の増減。プラス＝入金） */
+export function book(g: Game, c: Company, k: Acct, v: number) {
+  if (!v) return;
+  c.cash += v;
+  const key = String(Math.max(0, g.q));
+  const b = ((c.books ??= {})[key] ??= {});
+  b[k] = (b[k] || 0) + v;
+}
+
+/** 期末の貸借対照表を記録 */
+function snapshotBS(g: Game, c: Company) {
+  (c.bsHist ??= {})[String(g.q)] = currentBS(c);
+}
+export function currentBS(c: Company): BS {
+  return { cash: c.cash, invest: (c.invest || []).reduce((t, h) => t + h.amount, 0), office: officeValue(c), service: serviceValue(c), stocks: c.stocks.length };
 }
 
 /** 途中放棄の違約金 */
@@ -836,7 +853,7 @@ export function resolveDev(g: Game) {
     if (s.investigate) {
       const e = c.engineers.find(x => x.id === s.investigate && x.via);
       if (e) {
-        c.cash -= INVESTIGATE_COST;
+        book(g, c, 'research', -INVESTIGATE_COST);
         e.checked = e.spy && e.spy.for !== c.id ? 'spy' : 'clean';
         c.secretNotes.push(`${quarterLabel(q)}：身辺調査の結果、${e.name} は${e.checked === 'spy' ? '【スパイ確定】' : '【シロ】'}`);
         L(c, `身辺調査 −${INVESTIGATE_COST}`, 'muted');
@@ -855,7 +872,7 @@ export function resolveDev(g: Game) {
     for (const e of [...c.engineers]) {
       if (s.assign[e.id] !== 'fire' || e.loan) continue;
       const sev = e.salary * SEVERANCE_QUARTERS;
-      c.cash -= sev;
+      book(g, c, 'severance', -sev);
       c.engineers = c.engineers.filter(x => x !== e);
       if (c.sleeper?.engineerId === e.id) c.sleeper = null;
       c.stats.fired++;
@@ -877,7 +894,7 @@ export function resolveDev(g: Game) {
       const p = c.projects.find(x => x.id === id);
       if (!p) continue;
       const fee = abandonFee(p);
-      c.cash -= fee;
+      book(g, c, 'loss', -fee);
       c.rep += ABANDON.rep;
       c.projects = c.projects.filter(x => x !== p);
       c.engineers.forEach(e => { if (hasSlot(e.assign, p.id)) e.assign = slots(e.assign).filter(t => t !== p.id).join('+') || null; });
@@ -890,14 +907,15 @@ export function resolveDev(g: Game) {
       const r = applyPlan(c.office, s.office);
       c.office = r.office;
       if (r.cost) {
-        c.cash -= r.cost;
+        book(g, c, 'capex', -r.asset);
+        book(g, c, 'remodel', -(r.cost - r.asset));
         c.office.spent += r.asset;
         L(c, `🏢 オフィス工事：${r.notes.join('・')}（−${r.cost}）`, 'gold');
       }
     }
     // 7. サービス立ち上げ
     if (s.launch && !c.service) {
-      c.cash -= launchCost(c);
+      book(g, c, 'launch', -launchCost(c));
       c.service = { level: 0 };
       L(c, `自社サービスを立ち上げ −${launchCost(c)}`, 'gold');
       headlines.push(`${c.name}、自社サービスを立ち上げ`);
@@ -914,7 +932,7 @@ export function resolveDev(g: Game) {
     for (const [fid, v] of Object.entries(s.invest || {})) {
       const f = (g.funds || []).find(x => x.id === fid);
       if (!f) continue;
-      c.cash -= v;
+      book(g, c, 'invest', -v);
       (c.invest ??= []).push({ fund: fid, amount: v });
       L(c, `💹 ${f.name}に投資 −${v}（結果は冬の決算で）`, 'muted');
     }
@@ -994,7 +1012,7 @@ export function resolveDev(g: Game) {
         else { inc = Math.floor(inc / 2); note = '（口コミ被害で半減）'; }
       }
       if (c.effects.buzz === q) inc *= 2;
-      if (inc || note) { c.cash += inc; L(c, `サービス収入 +${inc}${note}`, inc ? 'good' : 'bad'); }
+      if (inc || note) { book(g, c, 'service', inc); L(c, `サービス収入 +${inc}${note}`, inc ? 'good' : 'bad'); }
     }
 
     // 14. リファクタリング
@@ -1008,8 +1026,8 @@ export function resolveDev(g: Game) {
     // 15. 特許使用料
     for (const t of c.trolls) {
       const to = companyOf(g, t.from);
-      c.cash -= TROLL.pay;
-      if (to) { to.cash += TROLL.pay; ledgers[to.id].lines.push({ text: `特許使用料 +${TROLL.pay}`, tone: 'good' }); }
+      book(g, c, 'nonopOut', -TROLL.pay);
+      if (to) { book(g, to, 'nonopIn', TROLL.pay); ledgers[to.id].lines.push({ text: `特許使用料 +${TROLL.pay}`, tone: 'good' }); }
       t.left--;
       L(c, `特許使用料 −${TROLL.pay}`, 'bad');
     }
@@ -1018,12 +1036,12 @@ export function resolveDev(g: Game) {
     // 16. 給料
     let salary = round10(payroll(g, c).reduce((t, e) => t + e.salary, 0) * salaryMult(c));
     if (h === 'H9') salary = Math.round(salary * REMOTE_SALARY);
-    c.cash -= salary;
+    book(g, c, 'salary', -salary);
     L(c, `給料 −${salary}${h === 'H9' ? '（リモートで×0.7）' : ''}`);
 
     // 17. 本番障害
     if (c.debt >= INCIDENT.debt) {
-      c.cash -= INCIDENT.loss;
+      book(g, c, 'loss', -INCIDENT.loss);
       c.rep += INCIDENT.rep;
       L(c, `本番障害が発生！ −${INCIDENT.loss}・評判${INCIDENT.rep}`, 'bad');
       headlines.push(`${c.name}で大規模障害`);
@@ -1031,7 +1049,7 @@ export function resolveDev(g: Game) {
     // 18. 利息
     if (c.cash < 0) {
       const it = Math.ceil(-c.cash * INTEREST);
-      c.cash -= it;
+      book(g, c, 'interest', -it);
       L(c, `借入の利息 −${it}`, 'bad');
     }
     // 19. 社員イベント
@@ -1105,7 +1123,7 @@ export function resolveDev(g: Game) {
     const score = (c: Company) => Math.max(0, ...c.engineers.filter(e => working(g, e)).map(e => Math.max(0, ...SKILLS.map(k => e.skills[k] || 0))));
     const best = Math.max(...g.companies.map(score));
     const winners = g.companies.filter(c => score(c) === best && best > 0);
-    winners.forEach(c => { c.cash += HACKATHON.prize; c.rep += HACKATHON.rep; c.yearProfit += HACKATHON.prize; });
+    winners.forEach(c => { book(g, c, 'nonopIn', HACKATHON.prize); c.rep += HACKATHON.rep; c.yearProfit += HACKATHON.prize; });
     blocks.push({
       kind: 'season', icon: '🏆', title: '夏のハッカソン',
       lines: [...g.companies.map(c => ({ text: `${c.name}：最高スキル ${score(c)}` })), { text: winners.length ? `優勝 ${winners.map(c => c.name).join('・')}：+${HACKATHON.prize}・評判+${HACKATHON.rep}` : '優勝なし', tone: 'gold' as const }],
@@ -1159,7 +1177,8 @@ export function resolveDev(g: Game) {
         const back = round10(h.amount * m);
         total += back; paid += h.amount;
       }
-      c.cash += total;
+      book(g, c, 'invest', paid);
+      book(g, c, 'invgain', total - paid);
       c.yearProfit += total;
       const gain = total - paid;
       if (gain > best.gain) best = { c: c.name, gain };
@@ -1174,7 +1193,7 @@ export function resolveDev(g: Game) {
     const lines: RevealLine[] = [];
     g.companies.forEach(c => {
       const v = c.debt * AUDIT.perDebt;
-      if (v) { c.cash -= v; c.yearProfit -= v; lines.push({ text: `${c.name}：監査で負債${c.debt}×${AUDIT.perDebt} = −${v}`, tone: 'bad' }); }
+      if (v) { book(g, c, 'loss', -v); c.yearProfit -= v; lines.push({ text: `${c.name}：監査で負債${c.debt}×${AUDIT.perDebt} = −${v}`, tone: 'bad' }); }
       else lines.push({ text: `${c.name}：監査は問題なし`, tone: 'good' });
     });
     const best = Math.max(...g.companies.map(c => c.yearProfit));
@@ -1186,7 +1205,7 @@ export function resolveDev(g: Game) {
     g.companies.forEach(c => { c.yearProfit = 0; });
   }
 
-  g.companies.forEach(c => { c.history.push(c.cash); });
+  g.companies.forEach(c => { c.history.push(c.cash); snapshotBS(g, c); });
   // 古い効果を掃除
   g.companies.forEach(c => {
     (Object.keys(c.effects) as (keyof Company['effects'])[]).forEach(k => { if ((c.effects[k] ?? -1) < q + 1) delete c.effects[k]; });
@@ -1210,7 +1229,7 @@ function payout(g: Game, c: Company, p: ActiveProject, team: Engineer[], gross: 
       const lender = companyOf(g, e.loan.from);
       const v = round10(gross * e.loan.share / 100);
       if (lender && v) {
-        net -= v; lender.cash += v;
+        net -= v; book(g, lender, 'nonopIn', v);
         ledgers[c.id].lines.push({ text: `レンタル取り分（${e.name}）−${v}`, tone: 'muted' });
         ledgers[lender.id].lines.push({ text: `レンタル取り分 +${v}`, tone: 'good' });
       }
@@ -1219,12 +1238,12 @@ function payout(g: Game, c: Company, p: ActiveProject, team: Engineer[], gross: 
       const emp = companyOf(g, e.spy.for);
       const v = round10(gross * SPY_STEAL);
       if (emp && v) {
-        net -= v; emp.cash += v;
+        net -= v; book(g, emp, 'nonopIn', v);
         ledgers[emp.id].lines.push({ text: `雑収入 +${v}`, tone: 'good' });     // 理由は表示しない
       }
     }
   }
-  c.cash += net;
+  book(g, c, 'project', net);
   return net;
 }
 
@@ -1257,7 +1276,7 @@ function completeProject(g: Game, c: Company, p: ActiveProject, team: Engineer[]
   } else {
     lg.lines.push({ text: `「${p.name}」の保守契約が満了`, tone: 'good' });
   }
-  if (p.tags.includes('repeat')) { c.cash += REPEAT_BONUS; lg.lines.push({ text: `リピート受注ボーナス +${REPEAT_BONUS}`, tone: 'good' }); }
+  if (p.tags.includes('repeat')) { book(g, c, 'project', REPEAT_BONUS); lg.lines.push({ text: `リピート受注ボーナス +${REPEAT_BONUS}`, tone: 'good' }); }
   if (p.tags.includes('record')) { c.rep++; lg.lines.push({ text: '実績になって評判+1', tone: 'good' }); }
   if (p.type === 'startup' && chance(g, STOCK_CHANCE)) { c.stocks.push(g.q); lg.lines.push({ text: '📈 報酬として株をもらった！', tone: 'gold' }); }
   if (p.type === 'ai') { c.aiKnowhow++; lg.lines.push({ text: `AIノウハウ+1（計${c.aiKnowhow}）`, tone: 'good' }); }
@@ -1276,7 +1295,7 @@ function accuse(g: Game, c: Company, e: Engineer): RevealBlock {
     emp.stats.caught++;
     if (e.via === 'rent') {
       delete e.loan; delete e.spy; delete e.via; delete e.checked;
-      emp.cash -= ACCUSE.rentFine;
+      book(g, emp, 'loss', -ACCUSE.rentFine);
       emp.rep += ACCUSE.employerRep;
       lines.push({ text: `本物のスパイだった！ ${e.name} は ${c.name} の正社員に。${emp.name}は罰金${ACCUSE.rentFine}・評判${ACCUSE.employerRep}`, tone: 'bad' });
     } else {

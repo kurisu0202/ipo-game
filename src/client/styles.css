@@ -611,3 +611,14 @@ details.fold.secret > summary { color: var(--down); }
 .lvdot.next { background: var(--gold-bg); color: var(--gold); outline: 2px dashed var(--gold); outline-offset: -2px; }
 .svc-kpis { grid-template-columns: repeat(3, 1fr); }
 .svc-kpis .kpi .num { font-size: 20px; }
+
+/* ===== 決算書 ===== */
+.fin-q { display: flex; gap: 6px; align-items: center; margin: 10px 0 8px; }
+.fin-q select { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line2); background: var(--card2); color: var(--ink); font: inherit; font-weight: 700; }
+.fin-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.fin-table td { padding: 5px 4px; border-bottom: 1px dashed var(--line); }
+.fin-table td:last-child { text-align: right; white-space: nowrap; font-weight: 700; }
+.fin-table tr.b td { font-weight: 900; border-bottom: 1px solid var(--line2); padding-top: 8px; }
+.fin-table tr.sub td { background: var(--card2); }
+.fin-table tr.total td { border-top: 2px solid var(--ink); border-bottom: 0; font-size: 15px; }
+.fin-table td.down { color: var(--down); }

@@ -10,6 +10,11 @@ function rng(seed: number) {
 }
 
 function invariants(g: Game) {
+  // 帳簿の合計 ＋ 開始資金 ＝ 今の現金（記録漏れがない）
+  g.companies.forEach(c => {
+    const sum = Object.values(c.books || {}).reduce((t, b) => t + Object.values(b).reduce((u, v) => u + (v || 0), 0), 0);
+    expect(GAME.startCash + sum).toBe(c.cash);
+  });
   // カードは40枚のまま
   const cards = g.cardDeck.length + g.cardDiscard.length + g.companies.reduce((t, c) => t + c.hand.length, 0);
   expect(cards).toBe(40);

@@ -10,6 +10,7 @@ import { BidTab, CardDetail, CardTile } from './BidTab';
 import { IndustryChip, IndustryDetail } from './Industry';
 import { VoiceBubble, setVoice, voiceOn } from './Voice';
 import { OfficeView } from './Office';
+import { FinanceCard } from './Finance';
 import { DevTab, EngBadges, ProjectSkillSheet, TraitLine, XpLine, devSummary } from './DevTab';
 import { sfx, setSound, soundOn } from './fx/sound';
 import type { Snapshot } from './session';
@@ -189,6 +190,8 @@ function MeTab({ v, me }: { v: PlayerView; me: Company }) {
         <div className="kpi"><small>🧾 負債</small><span className={`num ${me.debt >= 6 ? 'down' : me.debt >= 4 ? 'gold' : ''}`}>{me.debt}</span><div className="note">{me.debt >= 6 ? '本番障害が起きる！' : '6以上で本番障害'}</div></div>
         <div className="kpi"><small>🚀 サービス</small><span className="num">{me.service ? `Lv${me.service.level}` : 'なし'}</span><div className="note">{me.service ? `毎期${serviceIncome(me, me.service.level)}・価値${serviceValue(me)}${me.service.branch ? `・${BRANCHES[me.service.branch].icon}` : ''}` : '開発タブで立ち上げ'}</div></div>
       </div>
+      <div className="sec-title">📊 決算書（PL・BS） <small>期ごとに見られます</small></div>
+      <FinanceCard g={g} me={me} />
       <div className="card" style={{ marginTop: 10 }}><div className="row"><b>現金の推移</b><span className="grow" /><span className="note">開始 {GAME.startCash}</span></div><Sparkline values={me.history} color={companyColor(g, me.id)} /></div>
       <div className="sec-title">👥 社員 <span className="n">{me.engineers.length}</span><small>給料の合計 {pay}万円/期（貸し出し中を含む{salaryMult(me) !== 1 ? `・業種で×${salaryMult(me)}` : ''}）</small></div>
       <div className="chips" style={{ margin: '0 2px 8px' }}>
